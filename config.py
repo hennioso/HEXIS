@@ -51,10 +51,11 @@ SCALP_BB_STD           = 2.0
 SCALP_RSI_PERIOD       = 7
 SCALP_VOL_PERIOD       = 20
 
-# ---- Fibonacci Strategy Parameters ----------------------------------------
+# ---- SNIPER Strategy Parameters (Fibonacci Retracement) -------------------
 FIB_LOOKBACK        = int(os.getenv("FIB_LOOKBACK", "50"))                      # Candles to find swing high/low
-FIB_STOP_LOSS_PCT   = float(os.getenv("FIB_STOP_LOSS_PCT",  "0.015"))           # 1.5% stop loss
-FIB_TAKE_PROFIT_PCT = float(os.getenv("FIB_TAKE_PROFIT_PCT", "0.030"))          # 3.0% take profit (2:1 R:R)
+FIB_STOP_LOSS_PCT   = float(os.getenv("FIB_STOP_LOSS_PCT",  "0.015"))           # 1.5% SL (standard levels)
+FIB_TAKE_PROFIT_PCT = float(os.getenv("FIB_TAKE_PROFIT_PCT", "0.030"))          # 3.0% TP (2:1 R:R)
+# Deep levels (0.882 / 0.941): SL is placed structurally at swing high/low ± 0.2%
 
 # ---- Bot Behaviour ---------------------------------------------------------
 LOOP_INTERVAL_SECONDS = 15  # How often the bot checks prices (seconds)
