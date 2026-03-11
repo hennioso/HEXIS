@@ -51,5 +51,10 @@ SCALP_BB_STD           = 2.0
 SCALP_RSI_PERIOD       = 7
 SCALP_VOL_PERIOD       = 20
 
+# ---- Fibonacci Strategy Parameters ----------------------------------------
+FIB_LOOKBACK        = int(os.getenv("FIB_LOOKBACK", "50"))                      # Candles to find swing high/low
+FIB_STOP_LOSS_PCT   = float(os.getenv("FIB_STOP_LOSS_PCT",  "0.015"))           # 1.5% stop loss
+FIB_TAKE_PROFIT_PCT = float(os.getenv("FIB_TAKE_PROFIT_PCT", "0.030"))          # 3.0% take profit (2:1 R:R)
+
 # ---- Bot Behaviour ---------------------------------------------------------
 LOOP_INTERVAL_SECONDS = 15  # How often the bot checks prices (seconds)

@@ -17,6 +17,7 @@ import config
 from exchange import BitunixClient
 from strategy import check_signal
 from strategy_scalp import check_scalp_signal, ScalpSignal
+from strategy_fib import check_fib_signal
 from strategy import Signal
 from risk_manager import RiskManager
 from trader import Trader
@@ -60,6 +61,30 @@ def symbol_loop(
                     f"Qty: {pos.get('qty')} | "
                     f"uPNL: {pos.get('unrealizedPNL', 'N/A')}"
                 )
+            elif strategy == "fib":
+                fib = check_fib_signal(
+                    klines_5m=klines_5m,
+                    lookback=config.FIB_LOOKBACK,
+                )
+                if fib:
+                    log.info(
+                        f"FIB SIGNAL: {fib.direction.upper()} | "
+                        f"Price: {fib.price:.4f} | "
+                        f"Level: {fib.fib_level} @ {fib.fib_price:.4f} | "
+                        f"RSI: {fib.rsi:.1f} | "
+                        f"Swing: {fib.swing_low:.4f}–{fib.swing_high:.4f}"
+                    )
+                    signal = Signal(
+                        direction=fib.direction,
+                        price=fib.price,
+                        rsi_5m=fib.rsi,
+                        ema_fast_5m=0,
+                        ema_slow_5m=0,
+                        trend_15m="fib",
+                    )
+                    trader.open_position(signal)
+                else:
+                    log.debug("No Fibonacci signal.")
             elif strategy == "scalp":
                 scalp = check_scalp_signal(
                     klines_5m=klines_5m,
@@ -125,7 +150,7 @@ def main():
 
     client = BitunixClient(config.API_KEY, config.SECRET_KEY)
 
-    # Two RiskManager instances – one per strategy
+    # Three RiskManager instances – one per strategy
     risk_manager_trend = RiskManager(
         risk_per_trade=config.RISK_PER_TRADE,
         stop_loss_pct=config.STOP_LOSS_PCT,
@@ -158,8 +183,22 @@ def main():
     stop_event = threading.Event()
     threads = []
 
+    risk_manager_fib = RiskManager(
+        risk_per_trade=config.RISK_PER_TRADE,
+        stop_loss_pct=config.FIB_STOP_LOSS_PCT,
+        take_profit_pct=config.FIB_TAKE_PROFIT_PCT,
+        leverage=config.LEVERAGE,
+        max_margin_usdt=config.MAX_MARGIN_USDT,
+        max_margin_trades=config.MAX_MARGIN_TRADES,
+    )
+
     for symbol, strategy in zip(config.SYMBOLS, config.STRATEGIES):
-        rm = risk_manager_scalp if strategy == "scalp" else risk_manager_trend
+        if strategy == "scalp":
+            rm = risk_manager_scalp
+        elif strategy == "fib":
+            rm = risk_manager_fib
+        else:
+            rm = risk_manager_trend
         t = threading.Thread(
             target=symbol_loop,
             args=(symbol, strategy, client, rm, stop_event),
