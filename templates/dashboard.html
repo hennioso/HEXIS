@@ -414,7 +414,8 @@
     <span class="dot"></span>
     HEXIS
   </h1>
-  <div class="update-info" style="text-align:right">
+  <div class="update-info" style="text-align:right;display:flex;align-items:center;gap:12px">
+    <button id="notify-btn" onclick="requestNotifications()" style="display:none;padding:4px 10px;font-size:11px;background:rgba(88,166,255,0.1);color:#58a6ff;border:1px solid rgba(88,166,255,0.3);border-radius:6px;cursor:pointer">🔔 Enable Notifications</button>
     <span class="refresh-info" id="last-update">Loading...</span>
   </div>
 </header>
@@ -656,11 +657,58 @@
   }
   // ------------------------------------------
 
+  // ---- Browser Notifications ----
+  let _prevTradeStates = {};
+  let _notificationsInitialized = false;
+
+  function requestNotifications() {
+    if (!('Notification' in window)) return;
+    Notification.requestPermission().then(p => {
+      if (p === 'granted') {
+        document.getElementById('notify-btn').style.display = 'none';
+        _notificationsInitialized = true;
+      }
+    });
+  }
+
+  function sendNotification(title, body) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    new Notification(title, { body });
+  }
+
+  // Show or hide the enable-notifications button
+  if ('Notification' in window) {
+    if (Notification.permission === 'granted') {
+      _notificationsInitialized = true;
+    } else if (Notification.permission !== 'denied') {
+      document.getElementById('notify-btn').style.display = 'inline-block';
+    }
+  }
+  // ----------------------------------
+
   async function loadTrades() {
     const r = await fetch('/api/trades');
     const trades = await r.json();
 
     document.getElementById('trade-count').textContent = `${trades.length} Trades`;
+
+    // Check for status changes and send notifications
+    trades.forEach(t => {
+      const prev = _prevTradeStates[t.trade_id];
+      const sym = t.symbol.replace('USDT', '');
+      if (prev === undefined && t.status === 'open') {
+        sendNotification(`🟢 Trade Opened: ${sym}`, `${t.direction.toUpperCase()} @ ${fmtPrice(t.entry_price)} · TP: ${fmtPrice(t.tp_price)} · SL: ${fmtPrice(t.sl_price)}`);
+      } else if (prev === 'open' && t.status === 'tp_hit') {
+        const pnl = t.pnl_usdt ? `+${parseFloat(t.pnl_usdt).toFixed(2)} USDT` : '';
+        sendNotification(`✅ TP Hit: ${sym}`, `Exit @ ${fmtPrice(t.exit_price)} ${pnl}`);
+      } else if (prev === 'open' && t.status === 'sl_hit') {
+        const pnl = t.pnl_usdt ? `${parseFloat(t.pnl_usdt).toFixed(2)} USDT` : '';
+        sendNotification(`🔴 SL Hit: ${sym}`, `Exit @ ${fmtPrice(t.exit_price)} ${pnl}`);
+      } else if (prev === 'open' && t.status === 'closed') {
+        sendNotification(`⬜ Closed: ${sym}`, `Exit @ ${fmtPrice(t.exit_price)}`);
+      }
+      _prevTradeStates[t.trade_id] = t.status;
+    });
 
     const tbody = document.getElementById('trades-tbody');
     if (trades.length === 0) {
