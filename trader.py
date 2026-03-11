@@ -16,6 +16,11 @@ import database as db
 logger = logging.getLogger(__name__)
 
 
+def _qty_str(qty: float) -> str:
+    """Format qty without trailing .0 for integer quantities (e.g. 188.0 → '188')."""
+    return str(int(qty)) if qty == int(qty) else str(qty)
+
+
 class Trader:
     def __init__(self, client: BitunixClient, risk_manager: RiskManager, symbol: str):
         self.client = client
@@ -372,7 +377,7 @@ class Trader:
                         symbol=self.symbol,
                         side=close_side,
                         trade_side="CLOSE",
-                        qty=str(qty_tp1),
+                        qty=_qty_str(qty_tp1),
                         order_type="MARKET",
                     )
                     db.mark_sniper_tp(trade_id, 1)
@@ -404,7 +409,7 @@ class Trader:
                         symbol=self.symbol,
                         side=close_side,
                         trade_side="CLOSE",
-                        qty=str(qty_tp2),
+                        qty=_qty_str(qty_tp2),
                         order_type="MARKET",
                     )
                     db.mark_sniper_tp(trade_id, 2)
@@ -423,7 +428,7 @@ class Trader:
                         symbol=self.symbol,
                         side=close_side,
                         trade_side="CLOSE",
-                        qty=str(qty_tp3),
+                        qty=_qty_str(qty_tp3),
                         order_type="MARKET",
                     )
                     db.mark_sniper_tp(trade_id, 3)
