@@ -1,4 +1,4 @@
-# HEXIS – Autonomous Crypto Trading Agent
+# HEXIS – Autonomous Crypto Agent
 
 An automated futures trading bot for the **Bitunix** exchange. Trades BTC, ETH, SOL and XRP using two strategies — trend-following and mean-reversion scalping — with a live web dashboard for monitoring and manual control.
 

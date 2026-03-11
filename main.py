@@ -1,11 +1,11 @@
 """
-HEXIS – Autonomous Crypto Trading Agent
+HEXIS – Autonomous Crypto Agent
 Exchange: Bitunix Futures
-Symbole:  BTC, ETH, SOL, XRP
-Strategie: RSI + EMA Crossover auf 5m/15m Charts
+Symbols:  BTC, ETH, SOL, XRP
+Strategy: RSI + EMA Crossover on 5m/15m charts
 
-Starten:  python main.py
-Stoppen:  CTRL+C
+Start:  python main.py
+Stop:   CTRL+C
 """
 
 import logging
@@ -42,10 +42,10 @@ def symbol_loop(
     risk_manager: RiskManager,
     stop_event: threading.Event,
 ):
-    """Trading-Loop für ein einzelnes Symbol – läuft in eigenem Thread."""
+    """Trading loop for a single symbol – runs in its own thread."""
     log = logging.getLogger(symbol)
     trader = Trader(client=client, risk_manager=risk_manager, symbol=symbol)
-    log.info(f"Thread gestartet | Strategie: {strategy.upper()}")
+    log.info(f"Thread started | Strategy: {strategy.upper()}")
 
     while not stop_event.is_set():
         try:
@@ -56,7 +56,7 @@ def symbol_loop(
             if has_position:
                 pos = trader.current_position
                 log.info(
-                    f"Position offen | Side: {pos.get('side')} | "
+                    f"Position open | Side: {pos.get('side')} | "
                     f"Qty: {pos.get('qty')} | "
                     f"uPNL: {pos.get('unrealizedPNL', 'N/A')}"
                 )
@@ -71,12 +71,11 @@ def symbol_loop(
                 if scalp:
                     log.info(
                         f"SCALP SIGNAL: {scalp.direction.upper()} | "
-                        f"Preis: {scalp.price:.4f} | "
+                        f"Price: {scalp.price:.4f} | "
                         f"RSI(7): {scalp.rsi_7:.1f} | "
                         f"BB%: {scalp.bb_pct:.2f} | "
                         f"Vol: {scalp.vol_ratio:.2f}x"
                     )
-                    # ScalpSignal als Signal-kompatibles Objekt übergeben
                     signal = Signal(
                         direction=scalp.direction,
                         price=scalp.price,
@@ -87,7 +86,7 @@ def symbol_loop(
                     )
                     trader.open_position(signal)
                 else:
-                    log.debug("Kein Scalp-Signal.")
+                    log.debug("No scalp signal.")
             else:
                 klines_15m = client.get_klines(symbol, config.SLOW_TF, limit=config.KLINE_LIMIT)
                 signal = check_signal(
@@ -100,33 +99,33 @@ def symbol_loop(
                 if signal:
                     log.info(
                         f"TREND SIGNAL: {signal.direction.upper()} | "
-                        f"Preis: {signal.price:.4f} | "
+                        f"Price: {signal.price:.4f} | "
                         f"RSI: {signal.rsi_5m:.1f} | "
                         f"Trend: {signal.trend_15m}"
                     )
                     trader.open_position(signal)
                 else:
-                    log.debug("Kein Signal.")
+                    log.debug("No signal.")
 
         except Exception as e:
-            log.error(f"Fehler: {e}", exc_info=True)
+            log.error(f"Error: {e}", exc_info=True)
 
         stop_event.wait(config.LOOP_INTERVAL_SECONDS)
 
 
 def main():
     logger.info("=" * 60)
-    logger.info("  HEXIS – Autonomous Crypto Trading Agent")
+    logger.info("  HEXIS – Autonomous Crypto Agent")
     for sym, strat in zip(config.SYMBOLS, config.STRATEGIES):
         logger.info(f"  {sym:<10} → {strat.upper()}")
     logger.info(f"  Trend-SL/TP: {config.STOP_LOSS_PCT*100:.1f}% / {config.TAKE_PROFIT_PCT*100:.1f}%")
     logger.info(f"  Scalp-SL/TP: {config.SCALP_STOP_LOSS_PCT*100:.1f}% / {config.SCALP_TAKE_PROFIT_PCT*100:.1f}%")
-    logger.info(f"  Hebel: {config.LEVERAGE}x | Lernphase: {config.MAX_MARGIN_USDT:.0f} USDT × {config.MAX_MARGIN_TRADES} Trades")
+    logger.info(f"  Leverage: {config.LEVERAGE}x | Learning phase: {config.MAX_MARGIN_USDT:.0f} USDT × {config.MAX_MARGIN_TRADES} trades")
     logger.info("=" * 60)
 
     client = BitunixClient(config.API_KEY, config.SECRET_KEY)
 
-    # Zwei RiskManager-Instanzen – eine pro Strategie
+    # Two RiskManager instances – one per strategy
     risk_manager_trend = RiskManager(
         risk_per_trade=config.RISK_PER_TRADE,
         stop_loss_pct=config.STOP_LOSS_PCT,
@@ -144,17 +143,17 @@ def main():
         max_margin_trades=config.MAX_MARGIN_TRADES,
     )
 
-    # Verbindungstest
+    # Connection test
     try:
         balance = client.get_balance("USDT")
-        logger.info(f"Verbindung OK | Verfügbares Kapital: {float(balance.get('available', 0)):.2f} USDT")
+        logger.info(f"Connection OK | Available capital: {float(balance.get('available', 0)):.2f} USDT")
     except Exception as e:
-        logger.error(f"Verbindungsfehler: {e}")
-        logger.error("Prüfe API-Keys in der .env Datei.")
+        logger.error(f"Connection error: {e}")
+        logger.error("Check your API keys in the .env file.")
         sys.exit(1)
 
-    logger.info(f"Bot läuft – {len(config.SYMBOLS)} Symbole, prüft alle {config.LOOP_INTERVAL_SECONDS}s...")
-    logger.info("Zum Stoppen: CTRL+C\n")
+    logger.info(f"Bot running – {len(config.SYMBOLS)} symbols, checking every {config.LOOP_INTERVAL_SECONDS}s...")
+    logger.info("Press CTRL+C to stop\n")
 
     stop_event = threading.Event()
     threads = []
@@ -169,17 +168,17 @@ def main():
         )
         threads.append(t)
         t.start()
-        time.sleep(1)  # Starts leicht versetzt um API-Burst zu vermeiden
+        time.sleep(1)  # Stagger starts slightly to avoid API burst
 
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        logger.info("\nStopp-Signal empfangen – beende alle Threads...")
+        logger.info("\nStop signal received – shutting down all threads...")
         stop_event.set()
         for t in threads:
             t.join(timeout=10)
-        logger.info("Bot gestoppt.")
+        logger.info("Bot stopped.")
 
 
 if __name__ == "__main__":
