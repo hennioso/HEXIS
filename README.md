@@ -4,6 +4,8 @@ An automated futures trading bot for the **Bitunix** exchange. Trades BTC, ETH, 
 
 ![HEXIS Dashboard](screenshot.png)
 
+![HEXIS Terminal](screenshot_terminal.png)
+
 ---
 
 ## Features
