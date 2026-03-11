@@ -8,6 +8,7 @@ import time
 from flask import Flask, render_template, jsonify, request
 import database as db
 import config
+import strategy_state
 from exchange import BitunixClient
 from indicators import klines_to_df, add_indicators
 
@@ -169,6 +170,29 @@ def api_balance():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/strategies")
+def api_strategies():
+    """Returns the current strategy for every symbol."""
+    return jsonify(strategy_state.load())
+
+
+@app.route("/api/strategy", methods=["POST"])
+def api_set_strategy():
+    """Change the strategy for one symbol (hot-swap — no bot restart needed)."""
+    payload  = request.get_json(force=True)
+    symbol   = payload.get("symbol", "").upper()
+    strat    = payload.get("strategy", "").lower()
+
+    if not symbol or not strat:
+        return jsonify({"error": "symbol and strategy required"}), 400
+
+    ok = strategy_state.set_strategy(symbol, strat)
+    if not ok:
+        return jsonify({"error": f"invalid strategy '{strat}'. Use: trend | scalp | sniper"}), 400
+
+    return jsonify({"ok": True, "symbol": symbol, "strategy": strat})
 
 
 @app.route("/api/close_position", methods=["POST"])
