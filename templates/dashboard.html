@@ -770,7 +770,11 @@
         <td>${statusBadge(t.status)}</td>
         <td style="color:var(--muted)">${t.rsi_entry ? fmt(t.rsi_entry, 1) : '—'}</td>
         <td>
-          ${t.trend_15m ? `<span style="color:${t.trend_15m === 'bull' ? 'var(--green)' : 'var(--red)'}">${t.trend_15m === 'bull' ? '↑ Bull' : '↓ Bear'}</span>` : '—'}
+          ${t.trend_15m === 'bull' ? '<span style="color:var(--green)">↑ Bull</span>'
+            : t.trend_15m === 'bear' ? '<span style="color:var(--red)">↓ Bear</span>'
+            : t.trend_15m === 'fib'  ? '<span style="color:#c792ea">◈ Fib</span>'
+            : t.trend_15m === 'scalp' ? '<span style="color:var(--muted)">~ Scalp</span>'
+            : '—'}
         </td>
         <td>
           ${t.status === 'open'

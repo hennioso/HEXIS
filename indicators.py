@@ -107,6 +107,37 @@ def add_scalp_indicators(
     return df
 
 
+def add_fib_indicators(
+    df: pd.DataFrame,
+    lookback: int = 50,
+    rsi_period: int = 14,
+) -> pd.DataFrame:
+    """
+    Adds Fibonacci retracement indicators to the DataFrame.
+      swing_high  – highest high in the last `lookback` candles
+      swing_low   – lowest low in the last `lookback` candles
+      fib_236 / fib_382 / fib_500 / fib_618 / fib_786  – retracement levels
+      rsi_fib     – RSI for entry confirmation
+      ema_fast / ema_slow / ema_bull – trend direction filter
+    """
+    df = df.copy()
+    df["swing_high"] = df["high"].rolling(window=lookback).max()
+    df["swing_low"]  = df["low"].rolling(window=lookback).min()
+
+    rng = df["swing_high"] - df["swing_low"]
+    df["fib_236"] = df["swing_high"] - 0.236 * rng
+    df["fib_382"] = df["swing_high"] - 0.382 * rng
+    df["fib_500"] = df["swing_high"] - 0.500 * rng
+    df["fib_618"] = df["swing_high"] - 0.618 * rng
+    df["fib_786"] = df["swing_high"] - 0.786 * rng
+
+    df["rsi_fib"]  = rsi(df["close"], period=rsi_period)
+    df["ema_fast"] = ema(df["close"], 9)
+    df["ema_slow"] = ema(df["close"], 21)
+    df["ema_bull"] = df["ema_fast"] > df["ema_slow"]
+    return df
+
+
 def get_trend_direction(df: pd.DataFrame) -> Optional[str]:
     """
     Returns current trend direction: 'bull', 'bear', or None if unclear.
