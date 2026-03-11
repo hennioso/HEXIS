@@ -24,6 +24,38 @@ class Trader:
         self.current_position: Optional[dict] = None
         self._current_trade_id: Optional[str] = None  # DB trade ID of the open position
         db.init_db()
+        self._recover_open_position()
+
+    def _recover_open_position(self):
+        """
+        On startup, check if there's an open DB trade for this symbol that still
+        has a live position on the exchange. If so, restore _current_trade_id so
+        that monitor_sniper_tps() continues working after a bot restart.
+        """
+        open_trades = [
+            t for t in db.get_all_trades(limit=50)
+            if t["status"] == "open" and t["symbol"] == self.symbol
+        ]
+        if not open_trades:
+            return
+
+        # Verify the position is still live on the exchange
+        try:
+            pos = self.refresh_position()
+        except Exception:
+            return
+
+        if pos is None:
+            return
+
+        # Restore the most recent open trade ID
+        trade = open_trades[0]
+        self._current_trade_id = trade["trade_id"]
+        logger.info(
+            f"Position recovered after restart | trade_id: {trade['trade_id']} | "
+            f"strategy: {trade.get('strategy', 'unknown')} | "
+            f"Qty: {pos.get('qty')} | Side: {pos.get('side')}"
+        )
 
     def refresh_position(self) -> Optional[dict]:
         """Fetches the current open position from the exchange."""
