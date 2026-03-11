@@ -1,9 +1,10 @@
 """
-Web Dashboard für den Bitcoin Trading Bot.
-Starten: python web_dashboard.py
-Öffnen:  http://localhost:5000
+HEXIS Web Dashboard
+Start: python web_dashboard.py
+Open:  http://localhost:5000
 """
 
+import time
 from flask import Flask, render_template, jsonify, request
 import database as db
 import config
@@ -13,6 +14,9 @@ from indicators import klines_to_df, add_indicators
 app = Flask(__name__)
 _client = BitunixClient(config.API_KEY, config.SECRET_KEY)
 
+_last_sync: float = 0.0
+_SYNC_INTERVAL: float = 10.0  # seconds between exchange syncs
+
 
 @app.route("/")
 def index():
@@ -21,9 +25,16 @@ def index():
 
 def _sync_open_trades():
     """
-    Vergleicht alle 'open' DB-Trades mit der Exchange.
-    Trades die auf der Exchange nicht mehr existieren → in DB schließen.
+    Compares all 'open' DB trades with the exchange.
+    Trades no longer on the exchange are closed in the DB.
+    Rate-limited to once every _SYNC_INTERVAL seconds.
     """
+    global _last_sync
+    now = time.time()
+    if now - _last_sync < _SYNC_INTERVAL:
+        return
+    _last_sync = now
+
     open_trades = [t for t in db.get_all_trades(limit=500) if t["status"] == "open"]
     if not open_trades:
         return
@@ -78,6 +89,7 @@ def api_stats():
 
 @app.route("/api/trades")
 def api_trades():
+    _sync_open_trades()
     trades = db.get_all_trades(limit=200)
     return jsonify(trades)
 
@@ -106,7 +118,7 @@ def api_price():
 
 @app.route("/api/prices")
 def api_prices():
-    """Preise aller gehandelten Symbole auf einmal."""
+    """Prices for all traded symbols at once."""
     results = []
     for symbol in config.SYMBOLS:
         try:
@@ -126,7 +138,7 @@ def api_balance():
     try:
         data = _client.get_balance("USDT")
 
-        # Bitunix benennt das Feld unterschiedlich — alle Varianten probieren
+        # Bitunix uses different field names — try all known variants
         unrealized = 0.0
         for field in ("crossUnrealizedPNL", "unrealizedPNL", "crossUnPNL",
                       "unRealizedPNL", "totalUnrealizedProfit"):
@@ -136,7 +148,7 @@ def api_balance():
                 if unrealized != 0:
                     break
 
-        # Fallback: aus offenen Positionen berechnen
+        # Fallback: calculate from open positions
         if unrealized == 0.0:
             try:
                 positions = _client.get_open_positions()
@@ -161,16 +173,16 @@ def api_balance():
 
 @app.route("/api/close_position", methods=["POST"])
 def api_close_position():
-    """Schließt eine offene Position manuell via Market-Order."""
+    """Manually close an open position via market order."""
     try:
         payload  = request.get_json(force=True)
         symbol   = payload.get("symbol", "").upper()
         trade_id = payload.get("trade_id")
 
         if not symbol:
-            return jsonify({"error": "symbol fehlt"}), 400
+            return jsonify({"error": "symbol missing"}), 400
 
-        # Aktuellen Preis holen (für PnL-Berechnung)
+        # Get current price for PnL calculation
         exit_price = 0.0
         try:
             ticker     = _client.get_ticker(symbol)
@@ -178,13 +190,13 @@ def api_close_position():
         except Exception:
             pass
 
-        # Offene Position auf der Exchange holen
+        # Get open position on the exchange
         positions = _client.get_open_positions(symbol)
         pos = next((p for p in positions if float(p.get("qty", 0)) > 0), None)
 
         order_result = None
         if pos is not None:
-            # Position existiert noch → Market-Close-Order platzieren
+            # Position still open → place market close order
             position_side = pos.get("side", "BUY")
             qty           = str(pos.get("qty", "0"))
             close_side    = "SELL" if position_side == "BUY" else "BUY"
@@ -196,9 +208,9 @@ def api_close_position():
                 order_type="MARKET",
                 reduce_only=True,
             )
-        # else: Position bereits geschlossen (TP/SL) – nur DB aktualisieren
+        # else: position already closed (TP/SL) — only update DB
 
-        # DB-Eintrag in jedem Fall schließen
+        # Always close the DB entry
         if trade_id and exit_price:
             db.close_trade(trade_id=trade_id, exit_price=exit_price, status="closed")
 
@@ -210,5 +222,5 @@ def api_close_position():
 
 if __name__ == "__main__":
     db.init_db()
-    print("Dashboard läuft auf http://localhost:5000")
+    print("Dashboard running at http://localhost:5000")
     app.run(host="0.0.0.0", port=5000, debug=False)
