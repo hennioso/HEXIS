@@ -39,6 +39,25 @@ def init_db():
         """)
         conn.commit()
 
+        # Migration: add SNIPER partial-TP tracking columns if not present
+        _add_column_if_missing(conn, "trades", "strategy",   "TEXT")
+        _add_column_if_missing(conn, "trades", "tp1_price",  "REAL")
+        _add_column_if_missing(conn, "trades", "tp2_price",  "REAL")
+        _add_column_if_missing(conn, "trades", "tp3_price",  "REAL")
+        _add_column_if_missing(conn, "trades", "tp1_hit",    "INTEGER DEFAULT 0")
+        _add_column_if_missing(conn, "trades", "tp2_hit",    "INTEGER DEFAULT 0")
+        _add_column_if_missing(conn, "trades", "tp3_hit",    "INTEGER DEFAULT 0")
+        _add_column_if_missing(conn, "trades", "be_moved",   "INTEGER DEFAULT 0")
+        conn.commit()
+
+
+def _add_column_if_missing(conn, table: str, column: str, col_type: str):
+    """Safely adds a column to an existing table (no-op if already present)."""
+    try:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+    except Exception:
+        pass  # Column already exists
+
 
 @contextmanager
 def _connect():
@@ -62,20 +81,26 @@ def open_trade(
     sl_price: float,
     rsi_entry: float = None,
     trend_15m: str = None,
+    strategy: str = None,
+    tp1_price: float = None,
+    tp2_price: float = None,
+    tp3_price: float = None,
 ) -> int:
     """Saves a new trade as 'open'. Returns the DB row ID."""
     with _connect() as conn:
         cursor = conn.execute(
             """INSERT INTO trades
                (trade_id, order_id, symbol, direction, qty, entry_price,
-                tp_price, sl_price, entry_time, status, rsi_entry, trend_15m)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                tp_price, sl_price, entry_time, status, rsi_entry, trend_15m,
+                strategy, tp1_price, tp2_price, tp3_price)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 trade_id, order_id, symbol, direction, qty, entry_price,
                 tp_price, sl_price,
                 datetime.utcnow().isoformat(),
                 "open",
                 rsi_entry, trend_15m,
+                strategy, tp1_price, tp2_price, tp3_price,
             ),
         )
         conn.commit()
@@ -184,6 +209,24 @@ def get_stats() -> dict:
             "long_trades": long_count,
             "short_trades": total_trades - long_count,
         }
+
+
+def mark_sniper_tp(trade_id: str, tp_num: int):
+    """Mark a SNIPER partial TP as hit (tp_num: 1, 2, or 3)."""
+    col = f"tp{tp_num}_hit"
+    with _connect() as conn:
+        conn.execute(f"UPDATE trades SET {col}=1 WHERE trade_id=?", (trade_id,))
+        conn.commit()
+
+
+def mark_sniper_be_moved(trade_id: str, new_sl: float):
+    """Record that SL was moved to Break Even after TP1."""
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE trades SET be_moved=1, sl_price=? WHERE trade_id=?",
+            (new_sl, trade_id),
+        )
+        conn.commit()
 
 
 def get_daily_pnl() -> list[dict]:

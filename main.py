@@ -61,29 +61,26 @@ def symbol_loop(
                     f"Qty: {pos.get('qty')} | "
                     f"uPNL: {pos.get('unrealizedPNL', 'N/A')}"
                 )
+                # SNIPER: monitor partial TP levels every tick
+                if strategy == "sniper":
+                    trader.monitor_sniper_tps()
             elif strategy == "sniper":
                 sniper = check_sniper_signal(
                     klines_5m=klines_5m,
                     lookback=config.FIB_LOOKBACK,
                 )
                 if sniper:
-                    sl_info = f"SL: {sniper.sl_price:.4f} (structural)" if sniper.sl_price else "SL: default"
                     log.info(
                         f"SNIPER SIGNAL: {sniper.direction.upper()} | "
                         f"Price: {sniper.price:.4f} | "
-                        f"Level: {sniper.fib_level} @ {sniper.fib_price:.4f} | "
-                        f"RSI: {sniper.rsi:.1f} | "
-                        f"Swing: {sniper.swing_low:.4f}–{sniper.swing_high:.4f} | {sl_info}"
+                        f"Fib 0.882 @ {sniper.fib_price:.4f} | "
+                        f"SL: {sniper.sl_price:.4f} (structural) | "
+                        f"TP1: {sniper.tp1_price:.4f} | "
+                        f"TP2: {sniper.tp2_price:.4f} | "
+                        f"TP3: {sniper.tp3_price:.4f} | "
+                        f"Swing: {sniper.swing_low:.4f}–{sniper.swing_high:.4f}"
                     )
-                    signal = Signal(
-                        direction=sniper.direction,
-                        price=sniper.price,
-                        rsi_5m=sniper.rsi,
-                        ema_fast_5m=0,
-                        ema_slow_5m=0,
-                        trend_15m="sniper",
-                    )
-                    trader.open_position(signal, sl_price_override=sniper.sl_price)
+                    trader.open_sniper_position(sniper)
                 else:
                     log.debug("No SNIPER signal.")
             elif strategy == "scalp":
