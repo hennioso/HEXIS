@@ -1,0 +1,23 @@
+# Secrets – NIEMALS committen!
+.env
+
+# Datenbank & Logs (lokal, nicht im Repo)
+trades.db
+bot.log
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

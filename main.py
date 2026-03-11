@@ -1,0 +1,186 @@
+"""
+HEXIS – Autonomous Crypto Trading Agent
+Exchange: Bitunix Futures
+Symbole:  BTC, ETH, SOL, XRP
+Strategie: RSI + EMA Crossover auf 5m/15m Charts
+
+Starten:  python main.py
+Stoppen:  CTRL+C
+"""
+
+import logging
+import time
+import sys
+import threading
+
+import config
+from exchange import BitunixClient
+from strategy import check_signal
+from strategy_scalp import check_scalp_signal, ScalpSignal
+from strategy import Signal
+from risk_manager import RiskManager
+from trader import Trader
+
+
+# ---- Logging Setup ---------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)-8s | %(name)-10s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("bot.log", encoding="utf-8"),
+    ],
+)
+logger = logging.getLogger("main")
+
+
+def symbol_loop(
+    symbol: str,
+    strategy: str,
+    client: BitunixClient,
+    risk_manager: RiskManager,
+    stop_event: threading.Event,
+):
+    """Trading-Loop für ein einzelnes Symbol – läuft in eigenem Thread."""
+    log = logging.getLogger(symbol)
+    trader = Trader(client=client, risk_manager=risk_manager, symbol=symbol)
+    log.info(f"Thread gestartet | Strategie: {strategy.upper()}")
+
+    while not stop_event.is_set():
+        try:
+            klines_5m = client.get_klines(symbol, config.FAST_TF, limit=config.KLINE_LIMIT)
+
+            has_position = trader.has_open_position()
+
+            if has_position:
+                pos = trader.current_position
+                log.info(
+                    f"Position offen | Side: {pos.get('side')} | "
+                    f"Qty: {pos.get('qty')} | "
+                    f"uPNL: {pos.get('unrealizedPNL', 'N/A')}"
+                )
+            elif strategy == "scalp":
+                scalp = check_scalp_signal(
+                    klines_5m=klines_5m,
+                    bb_period=config.SCALP_BB_PERIOD,
+                    bb_std=config.SCALP_BB_STD,
+                    rsi_period=config.SCALP_RSI_PERIOD,
+                    vol_period=config.SCALP_VOL_PERIOD,
+                )
+                if scalp:
+                    log.info(
+                        f"SCALP SIGNAL: {scalp.direction.upper()} | "
+                        f"Preis: {scalp.price:.4f} | "
+                        f"RSI(7): {scalp.rsi_7:.1f} | "
+                        f"BB%: {scalp.bb_pct:.2f} | "
+                        f"Vol: {scalp.vol_ratio:.2f}x"
+                    )
+                    # ScalpSignal als Signal-kompatibles Objekt übergeben
+                    signal = Signal(
+                        direction=scalp.direction,
+                        price=scalp.price,
+                        rsi_5m=scalp.rsi_7,
+                        ema_fast_5m=0,
+                        ema_slow_5m=0,
+                        trend_15m="scalp",
+                    )
+                    trader.open_position(signal)
+                else:
+                    log.debug("Kein Scalp-Signal.")
+            else:
+                klines_15m = client.get_klines(symbol, config.SLOW_TF, limit=config.KLINE_LIMIT)
+                signal = check_signal(
+                    klines_5m=klines_5m,
+                    klines_15m=klines_15m,
+                    fast_ema=config.EMA_FAST,
+                    slow_ema=config.EMA_SLOW,
+                    rsi_period=config.RSI_PERIOD,
+                )
+                if signal:
+                    log.info(
+                        f"TREND SIGNAL: {signal.direction.upper()} | "
+                        f"Preis: {signal.price:.4f} | "
+                        f"RSI: {signal.rsi_5m:.1f} | "
+                        f"Trend: {signal.trend_15m}"
+                    )
+                    trader.open_position(signal)
+                else:
+                    log.debug("Kein Signal.")
+
+        except Exception as e:
+            log.error(f"Fehler: {e}", exc_info=True)
+
+        stop_event.wait(config.LOOP_INTERVAL_SECONDS)
+
+
+def main():
+    logger.info("=" * 60)
+    logger.info("  HEXIS – Autonomous Crypto Trading Agent")
+    for sym, strat in zip(config.SYMBOLS, config.STRATEGIES):
+        logger.info(f"  {sym:<10} → {strat.upper()}")
+    logger.info(f"  Trend-SL/TP: {config.STOP_LOSS_PCT*100:.1f}% / {config.TAKE_PROFIT_PCT*100:.1f}%")
+    logger.info(f"  Scalp-SL/TP: {config.SCALP_STOP_LOSS_PCT*100:.1f}% / {config.SCALP_TAKE_PROFIT_PCT*100:.1f}%")
+    logger.info(f"  Hebel: {config.LEVERAGE}x | Lernphase: {config.MAX_MARGIN_USDT:.0f} USDT × {config.MAX_MARGIN_TRADES} Trades")
+    logger.info("=" * 60)
+
+    client = BitunixClient(config.API_KEY, config.SECRET_KEY)
+
+    # Zwei RiskManager-Instanzen – eine pro Strategie
+    risk_manager_trend = RiskManager(
+        risk_per_trade=config.RISK_PER_TRADE,
+        stop_loss_pct=config.STOP_LOSS_PCT,
+        take_profit_pct=config.TAKE_PROFIT_PCT,
+        leverage=config.LEVERAGE,
+        max_margin_usdt=config.MAX_MARGIN_USDT,
+        max_margin_trades=config.MAX_MARGIN_TRADES,
+    )
+    risk_manager_scalp = RiskManager(
+        risk_per_trade=config.RISK_PER_TRADE,
+        stop_loss_pct=config.SCALP_STOP_LOSS_PCT,
+        take_profit_pct=config.SCALP_TAKE_PROFIT_PCT,
+        leverage=config.LEVERAGE,
+        max_margin_usdt=config.MAX_MARGIN_USDT,
+        max_margin_trades=config.MAX_MARGIN_TRADES,
+    )
+
+    # Verbindungstest
+    try:
+        balance = client.get_balance("USDT")
+        logger.info(f"Verbindung OK | Verfügbares Kapital: {float(balance.get('available', 0)):.2f} USDT")
+    except Exception as e:
+        logger.error(f"Verbindungsfehler: {e}")
+        logger.error("Prüfe API-Keys in der .env Datei.")
+        sys.exit(1)
+
+    logger.info(f"Bot läuft – {len(config.SYMBOLS)} Symbole, prüft alle {config.LOOP_INTERVAL_SECONDS}s...")
+    logger.info("Zum Stoppen: CTRL+C\n")
+
+    stop_event = threading.Event()
+    threads = []
+
+    for symbol, strategy in zip(config.SYMBOLS, config.STRATEGIES):
+        rm = risk_manager_scalp if strategy == "scalp" else risk_manager_trend
+        t = threading.Thread(
+            target=symbol_loop,
+            args=(symbol, strategy, client, rm, stop_event),
+            name=symbol,
+            daemon=True,
+        )
+        threads.append(t)
+        t.start()
+        time.sleep(1)  # Starts leicht versetzt um API-Burst zu vermeiden
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        logger.info("\nStopp-Signal empfangen – beende alle Threads...")
+        stop_event.set()
+        for t in threads:
+            t.join(timeout=10)
+        logger.info("Bot gestoppt.")
+
+
+if __name__ == "__main__":
+    main()
