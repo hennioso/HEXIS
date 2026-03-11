@@ -190,6 +190,20 @@ class BitunixClient:
         data = self._post("/api/v1/futures/trade/place_order", body=body)
         return data["data"]
 
+    def set_position_sl(self, symbol: str, sl_price: str) -> dict:
+        """
+        Update the stop-loss price on an open position.
+        Used to move SL to Break Even after TP1 is hit.
+        """
+        body = {
+            "symbol": symbol,
+            "slPrice": sl_price,
+            "slStopType": "MARK_PRICE",
+            "slOrderType": "MARKET",
+        }
+        data = self._post("/api/v1/futures/trade/set_tpsl", body=body)
+        return data.get("data", {})
+
     def cancel_all_orders(self, symbol: str) -> dict:
         """Cancel all open orders for a symbol."""
         body = {"symbol": symbol}

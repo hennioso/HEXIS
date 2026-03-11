@@ -1,155 +1,119 @@
 """
-SNIPER Strategy – Fibonacci Retracement with Smart Stop Loss
+SNIPER Strategy – Fibonacci 0.882 Retracement Entry
 
 Logic:
-  1. Determine trend using EMA9 vs EMA21 (5m chart)
-  2. Find swing high and swing low over the last FIB_LOOKBACK candles
-  3. Calculate Fibonacci retracement levels
-  4. Enter when price retraces to a key level WITH RSI confirmation
+  - Find swing high and swing low over the last FIB_LOOKBACK candles
+  - Entry ONLY at Fibonacci 0.882 level — no RSI, no EMA filter
 
-Standard levels (38.2%, 50%, 61.8%):
-  - SL calculated by RiskManager (percentage-based)
+Long Entry (price retraced 88.2% DOWN from swing high):
+  - Entry:  swing_high - 0.882 * range        (deep support, near swing low)
+  - SL:     swing_low  * (1 - 0.002)          (2 ticks below structural swing low)
+  - TP1:    swing_high - 0.786 * range  → close 20% + move SL to Break Even
+  - TP2:    swing_high - 0.650 * range  → close 50%
+  - TP3:    swing_high - 0.500 * range  → close 25%
+  - 5% stays open protected by BE stop
 
-Deep levels (88.2%, 94.1%) — "Sniper entries":
-  - Long: SL placed just below the swing low (1.0 level) — tight, structural SL
-  - Short: SL placed just above the swing high (1.0 level)
-  - TP scales with actual SL distance to maintain 2:1 R:R
-
-Long entry:
-  - EMA9 > EMA21 (uptrend)
-  - Price at 38.2%, 50%, 61.8%, 88.2%, or 94.1% Fibonacci support
-  - RSI(14) between 30–55 and turning up
-
-Short entry:
-  - EMA9 < EMA21 (downtrend)
-  - Price at 38.2%, 50%, 61.8%, 88.2%, or 94.1% Fibonacci resistance
-  - RSI(14) between 45–70 and turning down
+Short Entry (price rallied 88.2% UP from swing low):
+  - Entry:  swing_low  + 0.882 * range        (deep resistance, near swing high)
+  - SL:     swing_high * (1 + 0.002)          (2 ticks above structural swing high)
+  - TP1:    swing_low  + 0.786 * range  → close 20% + move SL to Break Even
+  - TP2:    swing_low  + 0.650 * range  → close 50%
+  - TP3:    swing_low  + 0.500 * range  → close 25%
+  - 5% stays open protected by BE stop
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 from indicators import klines_to_df, add_fib_indicators
 
 
-# Standard Fibonacci levels for normal entries
-FIB_STANDARD_LEVELS = ["fib_382", "fib_500", "fib_618"]
+# Price must be within this % of the 0.882 level to trigger
+FIB_TOLERANCE = 0.005       # 0.5%
 
-# Deep levels — sniper entries with structural SL
-FIB_DEEP_LEVELS = ["fib_882", "fib_941"]
+# Buffer beyond the structural swing point for SL placement
+SL_BUFFER = 0.002           # 0.2%
 
-# All entry levels
-FIB_ENTRY_LEVELS = FIB_STANDARD_LEVELS + FIB_DEEP_LEVELS
-
-# Price must be within this % of a Fibonacci level to trigger
-FIB_TOLERANCE = 0.004   # 0.4%
-
-# Buffer below swing low (long) / above swing high (short) for deep-level SL
-SL_STRUCTURAL_BUFFER = 0.002  # 0.2%
-
-# RSI thresholds
-RSI_LONG_MAX  = 55
-RSI_LONG_MIN  = 30
-RSI_SHORT_MIN = 45
-RSI_SHORT_MAX = 70
+# Range must be at least this % of price to avoid flat/consolidating markets
+MIN_RANGE_PCT = 0.005       # 0.5%
 
 
 @dataclass
 class SniperSignal:
-    direction: str          # 'long' | 'short'
-    price: float
-    rsi: float
-    fib_level: str          # e.g. 'fib_618', 'fib_882'
-    fib_price: float        # actual Fibonacci price level hit
+    direction: str      # 'long' | 'short'
+    price: float        # current market price (entry)
+    fib_price: float    # exact 0.882 Fibonacci price
     swing_high: float
     swing_low: float
-    sl_price: Optional[float] = None  # set for deep levels (0.882 / 0.941), None for standard
+    sl_price: float     # structural SL — always set
+    tp1_price: float    # Fib 0.786 — close 20%, then SL → BE
+    tp2_price: float    # Fib 0.650 — close 50%
+    tp3_price: float    # Fib 0.500 — close 25%
 
 
 def check_sniper_signal(
     klines_5m: list[dict],
     lookback: int = 50,
-    rsi_period: int = 14,
-) -> Optional[SniperSignal]:
+) -> SniperSignal | None:
     """
-    Analyses 5m candle data and returns a SNIPER signal, or None.
+    Scans 5m candle data for a Fibonacci 0.882 SNIPER entry.
+    Returns a SniperSignal or None.
+
+    No RSI or EMA filter — purely structural price-action entry.
     """
     df = klines_to_df(klines_5m)
-    df = add_fib_indicators(df, lookback=lookback, rsi_period=rsi_period)
+    df = add_fib_indicators(df, lookback=lookback)
 
     if len(df) < lookback + 2:
         return None
 
-    prev  = df.iloc[-2]   # last closed candle
-    prev2 = df.iloc[-3]
+    prev = df.iloc[-2]   # last fully closed candle
 
-    required = ["rsi_fib", "ema_bull", "swing_high", "swing_low",
-                "fib_382", "fib_500", "fib_618", "fib_882", "fib_941"]
-    for col in required:
+    # NaN guard
+    for col in ("swing_high", "swing_low", "fib_882"):
         if prev[col] != prev[col]:
             return None
 
     price      = float(df.iloc[-1]["close"])
-    rsi_val    = float(prev["rsi_fib"])
-    rsi_prev   = float(prev2["rsi_fib"])
-    ema_bull   = bool(prev["ema_bull"])
     swing_high = float(prev["swing_high"])
     swing_low  = float(prev["swing_low"])
+    rng        = swing_high - swing_low
 
-    # Find which Fibonacci level price is near
-    hit_level = None
-    hit_price = None
-    for level in FIB_ENTRY_LEVELS:
-        fib_val = float(prev[level])
-        if abs(price - fib_val) / fib_val <= FIB_TOLERANCE:
-            hit_level = level
-            hit_price = fib_val
-            break
-
-    if hit_level is None:
+    # Skip flat / very narrow range markets
+    if rng / price < MIN_RANGE_PCT:
         return None
 
-    # Compute structural SL for deep levels
-    sl_price = None
-    if hit_level in FIB_DEEP_LEVELS:
-        sl_price = swing_low * (1 - SL_STRUCTURAL_BUFFER)   # long SL: just below swing low
-
-    # --- Long: Fibonacci support in uptrend ---
-    if (
-        ema_bull
-        and RSI_LONG_MIN < rsi_val < RSI_LONG_MAX
-        and rsi_val > rsi_prev
-    ):
+    # ------------------------------------------------------------------
+    # Long: price retraced 88.2% down from swing high (near swing low)
+    # ------------------------------------------------------------------
+    long_entry = swing_high - 0.882 * rng
+    if abs(price - long_entry) / long_entry <= FIB_TOLERANCE:
         return SniperSignal(
             direction="long",
             price=price,
-            rsi=rsi_val,
-            fib_level=hit_level,
-            fib_price=hit_price,
+            fib_price=long_entry,
             swing_high=swing_high,
             swing_low=swing_low,
-            sl_price=sl_price,
+            sl_price=round(swing_low * (1 - SL_BUFFER), 8),
+            tp1_price=round(swing_high - 0.786 * rng, 8),
+            tp2_price=round(swing_high - 0.650 * rng, 8),
+            tp3_price=round(swing_high - 0.500 * rng, 8),
         )
 
-    # --- Short: Fibonacci resistance in downtrend ---
-    # For shorts, structural SL is above swing high
-    if hit_level in FIB_DEEP_LEVELS:
-        sl_price = swing_high * (1 + SL_STRUCTURAL_BUFFER)
-
-    if (
-        not ema_bull
-        and RSI_SHORT_MIN < rsi_val < RSI_SHORT_MAX
-        and rsi_val < rsi_prev
-    ):
+    # ------------------------------------------------------------------
+    # Short: price rallied 88.2% up from swing low (near swing high)
+    # ------------------------------------------------------------------
+    short_entry = swing_low + 0.882 * rng
+    if abs(price - short_entry) / short_entry <= FIB_TOLERANCE:
         return SniperSignal(
             direction="short",
             price=price,
-            rsi=rsi_val,
-            fib_level=hit_level,
-            fib_price=hit_price,
+            fib_price=short_entry,
             swing_high=swing_high,
             swing_low=swing_low,
-            sl_price=sl_price,
+            sl_price=round(swing_high * (1 + SL_BUFFER), 8),
+            tp1_price=round(swing_low + 0.786 * rng, 8),
+            tp2_price=round(swing_low + 0.650 * rng, 8),
+            tp3_price=round(swing_low + 0.500 * rng, 8),
         )
 
     return None
