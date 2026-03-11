@@ -46,8 +46,7 @@ BITUNIX_SECRET_KEY=your_secret_key_here
 ### How to get your Bitunix API Key
 
 1. **Create an account** at [bitunix.com](https://www.bitunix.com/register?inviteCode=vefzzy) *(referral link — appreciated but not required)*
-2. Complete **identity verification (KYC)**
-3. In the top-right corner click your **Avatar → API Management**
+2. In the top-right corner click your **Avatar → API Management**
 4. Click **Create API Key**
 5. Set a label (e.g. `HEXIS`), enable **Read** and **Trade** permissions
 6. Copy **API Key** and **Secret Key** into your `.env` file
