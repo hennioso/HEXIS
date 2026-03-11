@@ -49,8 +49,14 @@ def _sync_open_trades():
 
     for trade in open_trades:
         symbol = trade["symbol"]
+        exchange_qty = open_qtys.get(symbol, 0)
+
         # Position auf Exchange noch offen?
-        if open_qtys.get(symbol, 0) > 0:
+        if exchange_qty > 0:
+            # Sync qty if it changed (e.g. manual position increase)
+            db_qty = float(trade.get("qty", 0))
+            if abs(exchange_qty - db_qty) > 0.0001:
+                db.update_trade_qty(trade["trade_id"], exchange_qty)
             continue  # noch offen, nichts tun
 
         # Nicht mehr auf Exchange → schließen
