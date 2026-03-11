@@ -17,7 +17,7 @@ import config
 from exchange import BitunixClient
 from strategy import check_signal
 from strategy_scalp import check_scalp_signal, ScalpSignal
-from strategy_fib import check_fib_signal
+from strategy_sniper import check_sniper_signal
 from strategy import Signal
 from risk_manager import RiskManager
 from trader import Trader
@@ -61,30 +61,31 @@ def symbol_loop(
                     f"Qty: {pos.get('qty')} | "
                     f"uPNL: {pos.get('unrealizedPNL', 'N/A')}"
                 )
-            elif strategy == "fib":
-                fib = check_fib_signal(
+            elif strategy == "sniper":
+                sniper = check_sniper_signal(
                     klines_5m=klines_5m,
                     lookback=config.FIB_LOOKBACK,
                 )
-                if fib:
+                if sniper:
+                    sl_info = f"SL: {sniper.sl_price:.4f} (structural)" if sniper.sl_price else "SL: default"
                     log.info(
-                        f"FIB SIGNAL: {fib.direction.upper()} | "
-                        f"Price: {fib.price:.4f} | "
-                        f"Level: {fib.fib_level} @ {fib.fib_price:.4f} | "
-                        f"RSI: {fib.rsi:.1f} | "
-                        f"Swing: {fib.swing_low:.4f}–{fib.swing_high:.4f}"
+                        f"SNIPER SIGNAL: {sniper.direction.upper()} | "
+                        f"Price: {sniper.price:.4f} | "
+                        f"Level: {sniper.fib_level} @ {sniper.fib_price:.4f} | "
+                        f"RSI: {sniper.rsi:.1f} | "
+                        f"Swing: {sniper.swing_low:.4f}–{sniper.swing_high:.4f} | {sl_info}"
                     )
                     signal = Signal(
-                        direction=fib.direction,
-                        price=fib.price,
-                        rsi_5m=fib.rsi,
+                        direction=sniper.direction,
+                        price=sniper.price,
+                        rsi_5m=sniper.rsi,
                         ema_fast_5m=0,
                         ema_slow_5m=0,
-                        trend_15m="fib",
+                        trend_15m="sniper",
                     )
-                    trader.open_position(signal)
+                    trader.open_position(signal, sl_price_override=sniper.sl_price)
                 else:
-                    log.debug("No Fibonacci signal.")
+                    log.debug("No SNIPER signal.")
             elif strategy == "scalp":
                 scalp = check_scalp_signal(
                     klines_5m=klines_5m,

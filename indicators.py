@@ -130,6 +130,8 @@ def add_fib_indicators(
     df["fib_500"] = df["swing_high"] - 0.500 * rng
     df["fib_618"] = df["swing_high"] - 0.618 * rng
     df["fib_786"] = df["swing_high"] - 0.786 * rng
+    df["fib_882"] = df["swing_high"] - 0.882 * rng
+    df["fib_941"] = df["swing_high"] - 0.941 * rng
 
     df["rsi_fib"]  = rsi(df["close"], period=rsi_period)
     df["ema_fast"] = ema(df["close"], 9)

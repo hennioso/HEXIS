@@ -84,7 +84,7 @@ class Trader:
         balance = self.client.get_balance("USDT")
         return float(balance.get("available", 0))
 
-    def open_position(self, signal: Signal) -> Optional[dict]:
+    def open_position(self, signal: Signal, sl_price_override: float = None) -> Optional[dict]:
         """
         Opens a new position based on the signal.
         Returns the order response or None on error.
@@ -111,6 +111,7 @@ class Trader:
             entry_price=signal.price,
             available_balance=balance,
             trade_count=trade_count,
+            sl_price_override=sl_price_override,
         )
         if trade_params is None:
             logger.warning("Position size too small – trade skipped.")

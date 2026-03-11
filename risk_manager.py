@@ -44,6 +44,7 @@ class RiskManager:
         entry_price: float,
         available_balance: float,
         trade_count: int = 0,
+        sl_price_override: float = None,
     ) -> TradeParams | None:
         """
         Calculates qty, TP and SL for a trade.
@@ -98,7 +99,16 @@ class RiskManager:
             price_prec = 5
 
         # Stop loss & take profit
-        if direction == "long":
+        if sl_price_override is not None:
+            sl_price = sl_price_override
+            # TP keeps the standard ratio but derived from the actual SL distance
+            sl_dist_pct = abs(entry_price - sl_price) / entry_price
+            tp_mult = self.take_profit_pct / self.stop_loss_pct  # e.g. 2.0 for 2:1 R:R
+            if direction == "long":
+                tp_price = entry_price * (1 + sl_dist_pct * tp_mult)
+            else:
+                tp_price = entry_price * (1 - sl_dist_pct * tp_mult)
+        elif direction == "long":
             sl_price = entry_price * (1 - self.stop_loss_pct)
             tp_price = entry_price * (1 + self.take_profit_pct)
         else:  # short
