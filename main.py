@@ -1,5 +1,6 @@
 """
-Crypto Trading Bot – Bitunix Futures
+HEXIS – Autonomous Crypto Trading Agent
+Exchange: Bitunix Futures
 Symbole:  BTC, ETH, SOL, XRP
 Strategie: RSI + EMA Crossover auf 5m/15m Charts
 
@@ -115,7 +116,7 @@ def symbol_loop(
 
 def main():
     logger.info("=" * 60)
-    logger.info("  Crypto Trading Bot gestartet")
+    logger.info("  HEXIS – Autonomous Crypto Trading Agent")
     for sym, strat in zip(config.SYMBOLS, config.STRATEGIES):
         logger.info(f"  {sym:<10} → {strat.upper()}")
     logger.info(f"  Trend-SL/TP: {config.STOP_LOSS_PCT*100:.1f}% / {config.TAKE_PROFIT_PCT*100:.1f}%")
