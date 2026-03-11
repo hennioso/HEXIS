@@ -48,11 +48,18 @@ def symbol_loop(
     log = logging.getLogger(symbol)
     trader = Trader(client=client, risk_manager=risk_manager, symbol=symbol)
     log.info(f"Thread started | Strategy: {strategy.upper()}")
+    _last_strategy = strategy  # track for change detection
 
     while not stop_event.is_set():
         try:
             # Read strategy fresh each tick — allows hot-swap from dashboard
             strategy = strategy_state.get_strategy(symbol)
+            if strategy != _last_strategy:
+                log.info(
+                    f"Strategy changed: {_last_strategy.upper()} → {strategy.upper()} "
+                    f"(dashboard hot-swap)"
+                )
+                _last_strategy = strategy
 
             klines_5m = client.get_klines(symbol, config.FAST_TF, limit=config.KLINE_LIMIT)
 
