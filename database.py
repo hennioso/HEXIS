@@ -211,6 +211,13 @@ def get_stats() -> dict:
         }
 
 
+def update_trade_qty(trade_id: str, qty: float):
+    """Updates the qty of an open trade (e.g. after manual position sizing on exchange)."""
+    with _connect() as conn:
+        conn.execute("UPDATE trades SET qty=? WHERE trade_id=?", (qty, trade_id))
+        conn.commit()
+
+
 def mark_sniper_tp(trade_id: str, tp_num: int):
     """Mark a SNIPER partial TP as hit (tp_num: 1, 2, or 3)."""
     col = f"tp{tp_num}_hit"
