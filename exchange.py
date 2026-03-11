@@ -137,7 +137,7 @@ class BitunixClient:
             params["symbol"] = symbol
         data = self._get("/api/v1/futures/position/get_pending_positions", params=params)
         result = data.get("data", [])
-        # API gibt entweder eine Liste direkt oder {"positionList": [...]} zurück
+        # API returns either a list directly or {"positionList": [...]}
         if isinstance(result, list):
             return result
         return result.get("positionList", [])
