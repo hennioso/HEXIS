@@ -14,6 +14,7 @@ import sys
 import threading
 
 import config
+import strategy_state
 from exchange import BitunixClient
 from strategy import check_signal
 from strategy_scalp import check_scalp_signal, ScalpSignal
@@ -50,6 +51,9 @@ def symbol_loop(
 
     while not stop_event.is_set():
         try:
+            # Read strategy fresh each tick — allows hot-swap from dashboard
+            strategy = strategy_state.get_strategy(symbol)
+
             klines_5m = client.get_klines(symbol, config.FAST_TF, limit=config.KLINE_LIMIT)
 
             has_position = trader.has_open_position()
