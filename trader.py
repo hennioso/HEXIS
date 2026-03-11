@@ -93,6 +93,13 @@ class Trader:
             logger.warning("Position already open – skipping new trade.")
             return None
 
+        # DB-level duplicate check (catches edge cases where exchange and DB are out of sync)
+        existing = [t for t in db.get_all_trades(limit=20)
+                    if t["status"] == "open" and t["symbol"] == self.symbol]
+        if existing:
+            logger.warning(f"DB already has an open trade for {self.symbol} – skipping duplicate.")
+            return None
+
         balance = self.get_available_balance()
         if balance < 10:
             logger.error(f"Insufficient capital: {balance:.2f} USDT")
