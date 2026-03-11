@@ -1,24 +1,24 @@
 """
-Scalping-Strategie: Bollinger Bands + RSI(7) + Volume-Bestätigung
+Scalping Strategy: Bollinger Bands + RSI(7) + Volume Confirmation
 
-Logik (Mean-Reversion):
-  Preis berührt unteres Bollinger Band  → potenzielle Übertreibung nach unten
-  Preis berührt oberes Bollinger Band   → potenzielle Übertreibung nach oben
+Logic (Mean-Reversion):
+  Price touches lower Bollinger Band  -> potential downside overextension
+  Price touches upper Bollinger Band  -> potential upside overextension
 
-Long-Entry (Oversold Bounce):
-  - Close <= unteres BB (oder bb_pct < OVERSOLD_PCT)
+Long entry (Oversold Bounce):
+  - Close <= lower BB (or bb_pct < OVERSOLD_PCT)
   - RSI(7) < RSI_OVERSOLD  (default 32)
-  - Volumen > VOL_RATIO_MIN × Durchschnitt  (Bestätigung durch Aktivität)
-  - RSI dreht nach oben (aktuell > vorherige Kerze)   ← Trendwechsel-Frühzeichen
+  - Volume > VOL_RATIO_MIN x average  (confirmation by activity)
+  - RSI turning up (current > previous candle)  <- early reversal signal
 
-Short-Entry (Overbought Rejection):
-  - Close >= oberes BB (oder bb_pct > OVERBOUGHT_PCT)
+Short entry (Overbought Rejection):
+  - Close >= upper BB (or bb_pct > OVERBOUGHT_PCT)
   - RSI(7) > RSI_OVERBOUGHT  (default 68)
-  - Volumen > VOL_RATIO_MIN × Durchschnitt
-  - RSI dreht nach unten
+  - Volume > VOL_RATIO_MIN x average
+  - RSI turning down
 
-Exit: Über TP/SL in der Order (konfigurierbar in config.py)
-Empfohlene Parameter: SL 0.8%, TP 1.6% (2:1 R:R), engere Bänder als Trend-Strategie
+Exit: Via TP/SL in the order (configurable in config.py)
+Recommended params: SL 0.8%, TP 1.6% (2:1 R:R), tighter bands than trend strategy
 """
 
 from dataclasses import dataclass
@@ -29,9 +29,9 @@ from indicators import klines_to_df, add_scalp_indicators
 
 RSI_OVERSOLD    = 32
 RSI_OVERBOUGHT  = 68
-OVERSOLD_PCT    = 0.05   # bb_pct < 5%  → Preis im untersten BB-Bereich
-OVERBOUGHT_PCT  = 0.95   # bb_pct > 95% → Preis im obersten BB-Bereich
-VOL_RATIO_MIN   = 1.2    # Volumen muss mind. 20% über Durchschnitt liegen
+OVERSOLD_PCT    = 0.05   # bb_pct < 5%  -> price in lowest BB zone
+OVERBOUGHT_PCT  = 0.95   # bb_pct > 95% -> price in highest BB zone
+VOL_RATIO_MIN   = 1.2    # Volume must be at least 20% above average
 
 
 @dataclass
@@ -39,7 +39,7 @@ class ScalpSignal:
     direction: str      # 'long' | 'short'
     price: float
     rsi_7: float
-    bb_pct: float       # 0.0 = unteres Band, 1.0 = oberes Band
+    bb_pct: float       # 0.0 = lower band, 1.0 = upper band
     vol_ratio: float
     bb_upper: float
     bb_lower: float
@@ -53,8 +53,8 @@ def check_scalp_signal(
     vol_period: int = 20,
 ) -> Optional[ScalpSignal]:
     """
-    Analysiert 5m-Kerzendaten und gibt ein Scalp-Signal zurück, oder None.
-    Kein 15m-Trendfilter – funktioniert in Range- und Trendmärkten.
+    Analyses 5m candle data and returns a scalp signal, or None.
+    No 15m trend filter - works in both range and trending markets.
     """
     df = klines_to_df(klines_5m)
     df = add_scalp_indicators(df, bb_period=bb_period, bb_std=bb_std,
@@ -63,13 +63,13 @@ def check_scalp_signal(
     if len(df) < bb_period + 2:
         return None
 
-    # Vorletzter (abgeschlossener) Balken
+    # Second-to-last (closed) candle
     prev  = df.iloc[-2]
     prev2 = df.iloc[-3]
 
-    # NaN-Check
+    # NaN check
     for col in ["rsi_scalp", "bb_pct", "vol_ratio", "bb_upper", "bb_lower"]:
-        if prev[col] != prev[col]:  # NaN check
+        if prev[col] != prev[col]:
             return None
 
     rsi_val   = float(prev["rsi_scalp"])
@@ -78,7 +78,7 @@ def check_scalp_signal(
     vol_ratio = float(prev["vol_ratio"])
     price     = float(df.iloc[-1]["close"])
 
-    # Volumen-Filter
+    # Volume filter
     if vol_ratio < VOL_RATIO_MIN:
         return None
 
@@ -86,7 +86,7 @@ def check_scalp_signal(
     if (
         bb_pct < OVERSOLD_PCT
         and rsi_val < RSI_OVERSOLD
-        and rsi_val > rsi_prev   # RSI dreht nach oben
+        and rsi_val > rsi_prev   # RSI turning up
     ):
         return ScalpSignal(
             direction="long",
@@ -102,7 +102,7 @@ def check_scalp_signal(
     if (
         bb_pct > OVERBOUGHT_PCT
         and rsi_val > RSI_OVERBOUGHT
-        and rsi_val < rsi_prev   # RSI dreht nach unten
+        and rsi_val < rsi_prev   # RSI turning down
     ):
         return ScalpSignal(
             direction="short",

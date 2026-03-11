@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -394,14 +394,14 @@
 </head>
 <body>
 
-<!-- Bestätigungs-Dialog -->
+<!-- Confirmation Dialog -->
 <div id="confirm-overlay">
   <div id="confirm-box">
-    <h3>Position schließen?</h3>
-    <p id="confirm-msg">Soll diese Position wirklich mit einer Market-Order geschlossen werden?</p>
+    <h3>Close Position?</h3>
+    <p id="confirm-msg">Are you sure you want to close this position with a market order?</p>
     <div class="btn-row">
-      <button class="btn-cancel" onclick="cancelClose()">Abbrechen</button>
-      <button class="btn-confirm-close" onclick="confirmClose()">Jetzt schließen</button>
+      <button class="btn-cancel" onclick="cancelClose()">Cancel</button>
+      <button class="btn-confirm-close" onclick="confirmClose()">Close Now</button>
     </div>
   </div>
 </div>
@@ -412,7 +412,7 @@
     HEXIS
   </h1>
   <div class="update-info" style="text-align:right">
-    <span class="refresh-info" id="last-update">Lade Daten…</span>
+    <span class="refresh-info" id="last-update">Loading...</span>
   </div>
 </header>
 
@@ -445,7 +445,7 @@
   <!-- Balance Banner -->
   <div class="balance-banner" id="balance-banner">
     <div class="bal-item">
-      <span class="bal-label">Verfügbar</span>
+      <span class="bal-label">Available</span>
       <span class="bal-value green" id="b-available">—</span>
     </div>
     <div class="bal-divider"></div>
@@ -455,42 +455,42 @@
     </div>
     <div class="bal-divider"></div>
     <div class="bal-item">
-      <span class="bal-label">Unrealisierter PnL</span>
+      <span class="bal-label">Unrealized PnL</span>
       <span class="bal-value" id="b-upnl">—</span>
     </div>
     <div class="bal-divider"></div>
     <div class="bal-item">
-      <span class="bal-label">Gesamt (Est.)</span>
+      <span class="bal-label">Total (Est.)</span>
       <span class="bal-value blue" id="b-total">—</span>
     </div>
   </div>
 
   <!-- Stats -->
   <div class="stats-grid" id="stats-grid">
-    <div class="stat-card"><div class="label">Gesamt PnL</div><div class="value" id="s-pnl">—</div></div>
+    <div class="stat-card"><div class="label">Total PnL</div><div class="value" id="s-pnl">—</div></div>
     <div class="stat-card"><div class="label">Win Rate</div><div class="value" id="s-winrate">—</div></div>
-    <div class="stat-card"><div class="label">Trades gesamt</div><div class="value blue" id="s-total">—</div></div>
-    <div class="stat-card"><div class="label">Offene Positionen</div><div class="value yellow" id="s-open">—</div></div>
-    <div class="stat-card"><div class="label">Ø Gewinn</div><div class="value green" id="s-avgwin">—</div><div class="sub" id="s-longs">—</div></div>
-    <div class="stat-card"><div class="label">Ø Verlust</div><div class="value red" id="s-avgloss">—</div><div class="sub" id="s-shorts">—</div></div>
-    <div class="stat-card"><div class="label">Bester Trade</div><div class="value green" id="s-best">—</div></div>
-    <div class="stat-card"><div class="label">Schlechtester Trade</div><div class="value red" id="s-worst">—</div></div>
+    <div class="stat-card"><div class="label">Total Trades</div><div class="value blue" id="s-total">—</div></div>
+    <div class="stat-card"><div class="label">Open Positions</div><div class="value yellow" id="s-open">—</div></div>
+    <div class="stat-card"><div class="label">Avg Win</div><div class="value green" id="s-avgwin">—</div><div class="sub" id="s-longs">—</div></div>
+    <div class="stat-card"><div class="label">Avg Loss</div><div class="value red" id="s-avgloss">—</div><div class="sub" id="s-shorts">—</div></div>
+    <div class="stat-card"><div class="label">Best Trade</div><div class="value green" id="s-best">—</div></div>
+    <div class="stat-card"><div class="label">Worst Trade</div><div class="value red" id="s-worst">—</div></div>
   </div>
 
   <!-- Charts -->
   <div class="charts-row">
     <div class="chart-card">
-      <h3>Täglicher PnL (letzte 30 Tage)</h3>
+      <h3>Daily PnL (last 30 days)</h3>
       <div class="chart-wrap" style="position:relative">
         <canvas id="pnl-chart"></canvas>
         <div id="pnl-chart-empty" class="empty" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;flex-direction:column;gap:8px">
           <div class="icon">📊</div>
-          <span style="color:var(--muted);font-size:13px">Noch keine geschlossenen Trades</span>
+          <span style="color:var(--muted);font-size:13px">No closed trades yet</span>
         </div>
       </div>
     </div>
     <div class="chart-card">
-      <h3>Trade Verteilung</h3>
+      <h3>Trade Distribution</h3>
       <div class="chart-wrap"><canvas id="donut-chart"></canvas></div>
     </div>
   </div>
@@ -506,9 +506,9 @@
         <thead>
           <tr>
             <th>#</th>
-            <th>Zeit (Entry)</th>
+            <th>Time (Entry)</th>
             <th>Symbol</th>
-            <th>Richtung</th>
+            <th>Direction</th>
             <th>Qty</th>
             <th>Entry</th>
             <th>Exit</th>
@@ -518,11 +518,11 @@
             <th>Status</th>
             <th>RSI Entry</th>
             <th>Trend 15m</th>
-            <th>Aktion</th>
+            <th>Action</th>
           </tr>
         </thead>
         <tbody id="trades-tbody">
-          <tr><td colspan="12" class="loading">Lade Trades…</td></tr>
+          <tr><td colspan="14" class="loading">Loading trades...</td></tr>
         </tbody>
       </table>
     </div>
@@ -557,11 +557,11 @@
   function fmtDate(iso) {
     if (!iso) return '—';
     const d = new Date(iso + (iso.endsWith('Z') ? '' : 'Z'));
-    return d.toLocaleDateString('de-DE') + ' ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   }
 
   function statusBadge(s) {
-    const labels = { open: 'Offen', tp_hit: 'TP Hit', sl_hit: 'SL Hit', closed: 'Geschlossen', error: 'Fehler' };
+    const labels = { open: 'Open', tp_hit: 'TP Hit', sl_hit: 'SL Hit', closed: 'Closed', error: 'Error' };
     return `<span class="status-badge status-${s}">${labels[s] || s}</span>`;
   }
 
@@ -589,13 +589,13 @@
     renderDonut(wins, losses, s.open_trades);
   }
 
-  // ---------- Manuelles Schließen ----------
+  // ---------- Manual Close ----------
   let _pendingClose = null;
 
   function closePosition(symbol, tradeId, btn) {
     _pendingClose = { symbol, tradeId, btn };
     document.getElementById('confirm-msg').textContent =
-      `${symbol} Position mit Market-Order schließen?`;
+      `Close ${symbol} position with a market order?`;
     document.getElementById('confirm-overlay').classList.add('show');
   }
 
@@ -621,19 +621,19 @@
       });
       const data = await res.json();
       if (data.ok) {
-        btn.textContent = 'Geschlossen';
+        btn.textContent = 'Closed';
         btn.style.color = 'var(--green)';
         btn.style.borderColor = 'var(--green)';
         setTimeout(() => loadTrades(), 1500);
       } else {
-        btn.textContent = 'Fehler';
+        btn.textContent = 'Error';
         btn.disabled = false;
-        alert('Fehler: ' + (data.error || 'Unbekannt'));
+        alert('Error: ' + (data.error || 'Unknown'));
       }
     } catch (e) {
-      btn.textContent = 'Fehler';
+      btn.textContent = 'Error';
       btn.disabled = false;
-      alert('Netzwerkfehler: ' + e.message);
+      alert('Network error: ' + e.message);
     }
   }
   // ------------------------------------------
@@ -647,7 +647,7 @@
     const tbody = document.getElementById('trades-tbody');
     if (trades.length === 0) {
       tbody.innerHTML = `<tr><td colspan="14">
-        <div class="empty"><div class="icon">📊</div>Noch keine Trades vorhanden.<br>Der Bot wartet auf das erste Signal.</div>
+        <div class="empty"><div class="icon">📊</div>No trades yet.<br>Waiting for the first signal.</div>
       </td></tr>`;
       return;
     }
@@ -660,7 +660,7 @@
         <td><span class="dir-badge dir-${t.direction}">${t.direction}</span></td>
         <td>${fmt(t.qty, 4)}</td>
         <td>${fmtPrice(t.entry_price)}</td>
-        <td>${t.exit_price ? fmtPrice(t.exit_price) : '<span style="color:var(--muted)">Offen</span>'}</td>
+        <td>${t.exit_price ? fmtPrice(t.exit_price) : '<span style="color:var(--muted)">Open</span>'}</td>
         <td style="color:var(--green);font-size:12px">${t.tp_price ? fmtPrice(t.tp_price) : '—'}</td>
         <td style="color:var(--red);font-size:12px">${t.sl_price ? fmtPrice(t.sl_price) : '—'}</td>
         <td>${fmtPnl(t.pnl_usdt)}</td>
@@ -671,7 +671,7 @@
         </td>
         <td>
           ${t.status === 'open'
-            ? `<button class="close-btn" onclick="closePosition('${t.symbol}','${t.trade_id}',this)">Schließen</button>`
+            ? `<button class="close-btn" onclick="closePosition('${t.symbol}','${t.trade_id}',this)">Close</button>`
             : '<span style="color:var(--muted)">—</span>'}
         </td>
       </tr>
@@ -745,7 +745,7 @@
     donutChart = new Chart(ctx, {
       type: 'doughnut',
       data: {
-        labels: ['Gewinner', 'Verlierer', 'Offen'],
+        labels: ['Winners', 'Losers', 'Open'],
         datasets: [{
           data: hasData ? [wins, losses, open] : [1, 1, 1],
           backgroundColor: hasData
@@ -788,7 +788,7 @@
         const priceEl = document.getElementById(`sym-price-${p.symbol}`);
         const chgEl   = document.getElementById(`sym-chg-${p.symbol}`);
         if (!priceEl) return;
-        priceEl.textContent = `$${p.price.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: p.price < 10 ? 4 : 2 })}`;
+        priceEl.textContent = `$${p.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: p.price < 10 ? 4 : 2 })}`;
         const chg = p.change_pct;
         chgEl.textContent = `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`;
         chgEl.className = `sym-chg ${chg >= 0 ? 'up' : 'down'}`;
@@ -796,7 +796,7 @@
     } catch (_) {}
   }
 
-  // Klick auf Symbol-Karte
+  // Symbol card click handler
   document.querySelectorAll('.sym-card').forEach(card => {
     card.addEventListener('click', () => {
       document.querySelectorAll('.sym-card').forEach(c => c.classList.remove('active'));
@@ -831,10 +831,10 @@
     await Promise.all([loadPrices(), loadBalance(), loadStats(), loadTrades(), loadPnlChart()]);
     const now = new Date();
     document.getElementById('last-update').textContent =
-      `Zuletzt aktualisiert: ${now.toLocaleTimeString('de-DE')} · Auto-Refresh in 30s`;
+      `Last updated: ${now.toLocaleTimeString('en-GB')} · Auto-refresh in 30s`;
   }
 
-  // Initial load + auto-refresh alle 30 Sekunden
+  // Initial load + auto-refresh every 30 seconds
   refresh();
   setInterval(refresh, 30_000);
 </script>

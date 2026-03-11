@@ -1,6 +1,6 @@
 """
-Technische Indikatoren: EMA, RSI
-Berechnet auf Basis von OHLCV-Daten der Bitunix API.
+Technical indicators: EMA, RSI, Bollinger Bands
+Calculated from Bitunix API OHLCV kline data.
 """
 
 import numpy as np
@@ -10,8 +10,8 @@ from typing import Optional
 
 def klines_to_df(klines: list[dict]) -> pd.DataFrame:
     """
-    Konvertiert Bitunix-Kerzendaten in einen sortierten DataFrame.
-    Spalten: time, open, high, low, close, volume
+    Converts Bitunix kline data into a sorted DataFrame.
+    Columns: time, open, high, low, close, volume
     """
     df = pd.DataFrame(klines)
     df = df.rename(columns={"baseVol": "volume"})
@@ -24,14 +24,14 @@ def klines_to_df(klines: list[dict]) -> pd.DataFrame:
 
 
 def ema(series: pd.Series, period: int) -> pd.Series:
-    """Exponentieller gleitender Durchschnitt."""
+    """Exponential moving average."""
     return series.ewm(span=period, adjust=False).mean()
 
 
 def rsi(series: pd.Series, period: int = 14) -> pd.Series:
     """
     Relative Strength Index (RSI).
-    Gibt eine Series mit Werten zwischen 0 und 100 zurück.
+    Returns a Series with values between 0 and 100.
     """
     delta = series.diff()
     gain = delta.clip(lower=0)
@@ -47,19 +47,18 @@ def rsi(series: pd.Series, period: int = 14) -> pd.Series:
 
 def add_indicators(df: pd.DataFrame, fast_ema: int = 9, slow_ema: int = 21, rsi_period: int = 14) -> pd.DataFrame:
     """
-    Fügt EMA und RSI zum DataFrame hinzu.
-    Spalten die hinzugefügt werden:
-      ema_fast, ema_slow, rsi, ema_cross (True wenn fast > slow)
+    Adds EMA and RSI columns to the DataFrame.
+    Added columns: ema_fast, ema_slow, rsi, ema_bull, ema_cross_up, ema_cross_down
     """
     df = df.copy()
     df["ema_fast"] = ema(df["close"], fast_ema)
     df["ema_slow"] = ema(df["close"], slow_ema)
     df["rsi"] = rsi(df["close"], rsi_period)
 
-    # True = fast EMA ist über slow EMA (bullish)
+    # True = fast EMA is above slow EMA (bullish)
     df["ema_bull"] = df["ema_fast"] > df["ema_slow"]
 
-    # Crossover-Signale: True nur in der Kerze, in der der Crossover passiert
+    # Crossover signals: True only in the candle where the crossover occurs
     df["ema_cross_up"] = df["ema_bull"] & ~df["ema_bull"].shift(1).fillna(False)
     df["ema_cross_down"] = ~df["ema_bull"] & df["ema_bull"].shift(1).fillna(True)
 
@@ -69,7 +68,7 @@ def add_indicators(df: pd.DataFrame, fast_ema: int = 9, slow_ema: int = 21, rsi_
 def bollinger_bands(series: pd.Series, period: int = 20, std_dev: float = 2.0) -> pd.DataFrame:
     """
     Bollinger Bands.
-    Gibt DataFrame mit Spalten: bb_mid, bb_upper, bb_lower, bb_width zurück.
+    Returns DataFrame with columns: bb_mid, bb_upper, bb_lower, bb_width
     """
     mid = series.rolling(window=period).mean()
     std = series.rolling(window=period).std()
@@ -79,7 +78,7 @@ def bollinger_bands(series: pd.Series, period: int = 20, std_dev: float = 2.0) -
         "bb_mid":   mid,
         "bb_upper": upper,
         "bb_lower": lower,
-        "bb_width": (upper - lower) / mid,  # normalisierte Breite
+        "bb_width": (upper - lower) / mid,  # normalized band width
     })
 
 
@@ -91,11 +90,11 @@ def add_scalp_indicators(
     vol_period: int = 20,
 ) -> pd.DataFrame:
     """
-    Fügt Scalping-Indikatoren hinzu:
+    Adds scalping indicators to the DataFrame:
       bb_mid, bb_upper, bb_lower, bb_width
-      rsi_scalp (kurzer RSI)
-      vol_ratio (aktuelles Volumen / Durchschnittsvolumen)
-      bb_pct    (Position des Close innerhalb der Bänder, 0=lower, 1=upper)
+      rsi_scalp  (short-period RSI)
+      vol_ratio  (current volume / average volume)
+      bb_pct     (close position within bands: 0=lower, 1=upper)
     """
     df = df.copy()
     bb = bollinger_bands(df["close"], period=bb_period, std_dev=bb_std)
@@ -110,12 +109,12 @@ def add_scalp_indicators(
 
 def get_trend_direction(df: pd.DataFrame) -> Optional[str]:
     """
-    Gibt die aktuelle Trendrichtung zurück: 'bull', 'bear', oder None wenn unklar.
-    Basiert auf dem letzten abgeschlossenen Balken (vorletzter Eintrag, da letzter noch offen ist).
+    Returns current trend direction: 'bull', 'bear', or None if unclear.
+    Based on the last closed candle (second-to-last row, as the last is still open).
     """
     if len(df) < 2:
         return None
-    last = df.iloc[-2]  # vorletzter (abgeschlossener) Balken
+    last = df.iloc[-2]  # second-to-last (closed) candle
     if last["ema_bull"]:
         return "bull"
     return "bear"

@@ -1,6 +1,6 @@
 """
-SQLite Datenbank für Trade-History.
-Speichert alle Trades mit Entry, Exit, PnL etc.
+SQLite database for trade history.
+Stores all trades with entry, exit, PnL, etc.
 """
 
 import sqlite3
@@ -14,23 +14,23 @@ _lock = threading.Lock()
 
 
 def init_db():
-    """Erstellt die Datenbank und Tabellen falls noch nicht vorhanden."""
+    """Creates the database and tables if they don't exist yet."""
     with _connect() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS trades (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                trade_id    TEXT UNIQUE,        -- Bot-generierte UUID
-                order_id    TEXT,               -- Bitunix Order ID
+                trade_id    TEXT UNIQUE,        -- Bot-generated UUID
+                order_id    TEXT,               -- Bitunix order ID
                 symbol      TEXT NOT NULL,
                 direction   TEXT NOT NULL,      -- 'long' | 'short'
-                qty         REAL NOT NULL,      -- BTC-Menge
+                qty         REAL NOT NULL,      -- Base coin amount
                 entry_price REAL NOT NULL,
                 exit_price  REAL,
                 tp_price    REAL,
                 sl_price    REAL,
                 entry_time  TEXT NOT NULL,      -- ISO 8601
                 exit_time   TEXT,
-                pnl_usdt    REAL,               -- Realisierter PnL in USDT
+                pnl_usdt    REAL,               -- Realized PnL in USDT
                 status      TEXT NOT NULL DEFAULT 'open',  -- open|closed|tp_hit|sl_hit|error
                 rsi_entry   REAL,
                 trend_15m   TEXT,
@@ -63,7 +63,7 @@ def open_trade(
     rsi_entry: float = None,
     trend_15m: str = None,
 ) -> int:
-    """Speichert einen neuen Trade als 'open'. Gibt die DB-ID zurück."""
+    """Saves a new trade as 'open'. Returns the DB row ID."""
     with _connect() as conn:
         cursor = conn.execute(
             """INSERT INTO trades
@@ -84,7 +84,7 @@ def open_trade(
 
 def close_trade(trade_id: str, exit_price: float, status: str = "closed"):
     """
-    Schließt einen Trade und berechnet den PnL.
+    Closes a trade and calculates PnL.
     status: 'closed' | 'tp_hit' | 'sl_hit'
     """
     with _connect() as conn:
@@ -120,13 +120,13 @@ def close_trade(trade_id: str, exit_price: float, status: str = "closed"):
 
 
 def get_trade_count() -> int:
-    """Gibt die Gesamtanzahl aller bisher geöffneten Trades zurück."""
+    """Returns the total number of trades opened so far."""
     with _connect() as conn:
         return conn.execute("SELECT COUNT(*) FROM trades").fetchone()[0]
 
 
 def get_trade(trade_id: str) -> dict | None:
-    """Gibt einen einzelnen Trade anhand der trade_id zurück."""
+    """Returns a single trade by trade_id."""
     with _connect() as conn:
         row = conn.execute(
             "SELECT * FROM trades WHERE trade_id = ?", (trade_id,)
@@ -135,7 +135,7 @@ def get_trade(trade_id: str) -> dict | None:
 
 
 def get_all_trades(limit: int = 200) -> list[dict]:
-    """Gibt alle Trades zurück, neueste zuerst."""
+    """Returns all trades, newest first."""
     with _connect() as conn:
         rows = conn.execute(
             "SELECT * FROM trades ORDER BY entry_time DESC LIMIT ?", (limit,)
@@ -144,7 +144,7 @@ def get_all_trades(limit: int = 200) -> list[dict]:
 
 
 def get_stats() -> dict:
-    """Berechnet aggregierte Statistiken."""
+    """Calculates aggregated statistics."""
     with _connect() as conn:
         open_count = conn.execute(
             "SELECT COUNT(*) FROM trades WHERE status = 'open'"
@@ -187,7 +187,7 @@ def get_stats() -> dict:
 
 
 def get_daily_pnl() -> list[dict]:
-    """PnL pro Tag für das Chart (letzte 30 Tage)."""
+    """PnL per day for the chart (last 30 days)."""
     with _connect() as conn:
         rows = conn.execute(
             """SELECT DATE(exit_time) as day, SUM(pnl_usdt) as pnl
