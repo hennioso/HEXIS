@@ -18,7 +18,7 @@ _last_sync: float = 0.0
 _SYNC_INTERVAL: float = 10.0  # seconds between exchange syncs
 
 
-@app.route("/")
+@app.route("/", methods=["GET", "POST"])
 def index():
     return render_template("dashboard.html")
 
