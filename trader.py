@@ -376,9 +376,10 @@ class Trader:
                     self.client.place_order(
                         symbol=self.symbol,
                         side=close_side,
-                        trade_side="CLOSE",
+                        trade_side="OPEN",
                         qty=_qty_str(qty_tp1),
                         order_type="MARKET",
+                        reduce_only=True,
                     )
                     db.mark_sniper_tp(trade_id, 1)
                     logger.info(
@@ -408,9 +409,10 @@ class Trader:
                     self.client.place_order(
                         symbol=self.symbol,
                         side=close_side,
-                        trade_side="CLOSE",
+                        trade_side="OPEN",
                         qty=_qty_str(qty_tp2),
                         order_type="MARKET",
+                        reduce_only=True,
                     )
                     db.mark_sniper_tp(trade_id, 2)
                     logger.info(
@@ -427,9 +429,10 @@ class Trader:
                     self.client.place_order(
                         symbol=self.symbol,
                         side=close_side,
-                        trade_side="CLOSE",
+                        trade_side="OPEN",
                         qty=_qty_str(qty_tp3),
                         order_type="MARKET",
+                        reduce_only=True,
                     )
                     db.mark_sniper_tp(trade_id, 3)
                     logger.info(
