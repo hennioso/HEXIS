@@ -76,8 +76,12 @@ def symbol_loop(
                 if strategy == "sniper":
                     trader.monitor_sniper_tps()
             elif strategy == "sniper":
+                # SNIPER uses 15m candles with longer lookback for meaningful swings
+                klines_sniper = client.get_klines(
+                    symbol, config.SNIPER_TF, limit=config.SNIPER_KLINE_LIMIT
+                )
                 sniper = check_sniper_signal(
-                    klines_5m=klines_5m,
+                    klines_5m=klines_sniper,
                     lookback=config.FIB_LOOKBACK,
                 )
                 if sniper:

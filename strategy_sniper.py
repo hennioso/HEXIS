@@ -28,13 +28,13 @@ from indicators import klines_to_df, add_fib_indicators
 
 
 # Price must be within this % of the 0.882 level to trigger
-FIB_TOLERANCE = 0.005       # 0.5%
+FIB_TOLERANCE = 0.003       # 0.3% — tighter, more precise entries
 
 # Buffer beyond the structural swing point for SL placement
 SL_BUFFER = 0.002           # 0.2%
 
 # Range must be at least this % of price to avoid flat/consolidating markets
-MIN_RANGE_PCT = 0.005       # 0.5%
+MIN_RANGE_PCT = 0.015       # 1.5% — filters out consolidation phases
 
 
 @dataclass
