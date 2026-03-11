@@ -343,7 +343,6 @@ class Trader:
                         trade_side="CLOSE",
                         qty=str(qty_tp1),
                         order_type="MARKET",
-                        reduce_only=True,
                     )
                     db.mark_sniper_tp(trade_id, 1)
                     logger.info(
@@ -376,7 +375,6 @@ class Trader:
                         trade_side="CLOSE",
                         qty=str(qty_tp2),
                         order_type="MARKET",
-                        reduce_only=True,
                     )
                     db.mark_sniper_tp(trade_id, 2)
                     logger.info(
@@ -396,7 +394,6 @@ class Trader:
                         trade_side="CLOSE",
                         qty=str(qty_tp3),
                         order_type="MARKET",
-                        reduce_only=True,
                     )
                     db.mark_sniper_tp(trade_id, 3)
                     logger.info(
