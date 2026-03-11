@@ -231,13 +231,15 @@ class Trader:
         trade_id = f"sniper_{uuid.uuid4().hex[:16]}"
         sl_str = str(round(sniper.sl_price, price_prec))
 
+        tp3_str = str(round(sniper.tp3_price, price_prec))
+
         logger.info(
             f"SNIPER OPEN | {sniper.direction.upper()} | "
             f"Qty: {qty} | Entry: {entry_price:.4f} | "
             f"SL: {sl_str} (structural) | "
             f"TP1: {sniper.tp1_price:.4f} (20%) | "
             f"TP2: {sniper.tp2_price:.4f} (50%) | "
-            f"TP3: {sniper.tp3_price:.4f} (25%) | "
+            f"TP3: {sniper.tp3_price:.4f} (25%, exchange safety) | "
             f"Swing: {sniper.swing_low:.4f}–{sniper.swing_high:.4f}"
         )
 
@@ -249,6 +251,7 @@ class Trader:
                 qty=str(qty),
                 order_type="MARKET",
                 sl_price=sl_str,
+                tp_price=tp3_str,
                 client_id=trade_id,
             )
             order_id = result.get("orderId", "")
