@@ -61,30 +61,42 @@ class BitunixClient:
             "timestamp": timestamp,
         }
 
-    def _get(self, path: str, params: dict = None) -> dict:
+    def _get(self, path: str, params: dict = None, _retries: int = 2) -> dict:
         headers = self._auth_headers(query_params=params)
         url = BASE_URL + path
-        response = self.session.get(url, params=params, headers=headers, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        if data.get("code") != 0:
-            raise RuntimeError(f"Bitunix API Error [{data.get('code')}]: {data.get('msg')}")
-        return data
+        for attempt in range(_retries + 1):
+            try:
+                response = self.session.get(url, params=params, headers=headers, timeout=20)
+                response.raise_for_status()
+                data = response.json()
+                if data.get("code") != 0:
+                    raise RuntimeError(f"Bitunix API Error [{data.get('code')}]: {data.get('msg')}")
+                return data
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                if attempt < _retries:
+                    time.sleep(2)
+                    headers = self._auth_headers(query_params=params)  # fresh signature
+                    continue
+                raise
 
-    def _post(self, path: str, body: dict) -> dict:
+    def _post(self, path: str, body: dict, _retries: int = 2) -> dict:
         headers = self._auth_headers(body=body)
         url = BASE_URL + path
-        response = self.session.post(
-            url,
-            data=json.dumps(body, separators=(",", ":")),
-            headers=headers,
-            timeout=10,
-        )
-        response.raise_for_status()
-        data = response.json()
-        if data.get("code") != 0:
-            raise RuntimeError(f"Bitunix API Error [{data.get('code')}]: {data.get('msg')}")
-        return data
+        body_str = json.dumps(body, separators=(",", ":"))
+        for attempt in range(_retries + 1):
+            try:
+                response = self.session.post(url, data=body_str, headers=headers, timeout=20)
+                response.raise_for_status()
+                data = response.json()
+                if data.get("code") != 0:
+                    raise RuntimeError(f"Bitunix API Error [{data.get('code')}]: {data.get('msg')}")
+                return data
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+                if attempt < _retries:
+                    time.sleep(2)
+                    headers = self._auth_headers(body=body)  # fresh signature
+                    continue
+                raise
 
     # -------------------------------------------------------------------------
     # Market Data
