@@ -676,6 +676,39 @@
     new Notification(title, { body });
   }
 
+  // ---- Sound Alerts (Web Audio API) ----
+  const _audioCtx = window.AudioContext ? new AudioContext() : null;
+
+  function playSound(type) {
+    if (!_audioCtx) return;
+    const ctx = _audioCtx;
+
+    const configs = {
+      open:   [{ freq: 440, dur: 0.1 }, { freq: 550, dur: 0.15 }],          // ascending double beep
+      tp:     [{ freq: 523, dur: 0.1 }, { freq: 659, dur: 0.1 }, { freq: 784, dur: 0.2 }],  // 3-tone win
+      sl:     [{ freq: 330, dur: 0.15 }, { freq: 220, dur: 0.25 }],          // descending warning
+      close:  [{ freq: 400, dur: 0.12 }, { freq: 400, dur: 0.12 }],          // neutral double
+    };
+
+    const notes = configs[type] || configs.close;
+    let time = ctx.currentTime;
+
+    notes.forEach(({ freq, dur }) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, time);
+      gain.gain.setValueAtTime(0.25, time);
+      gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
+      osc.start(time);
+      osc.stop(time + dur);
+      time += dur + 0.05;
+    });
+  }
+  // --------------------------------------
+
   // Show or hide the enable-notifications button
   if ('Notification' in window) {
     if (Notification.permission === 'granted') {
@@ -698,14 +731,18 @@
       const sym = t.symbol.replace('USDT', '');
       if (prev === undefined && t.status === 'open') {
         sendNotification(`🟢 Trade Opened: ${sym}`, `${t.direction.toUpperCase()} @ ${fmtPrice(t.entry_price)} · TP: ${fmtPrice(t.tp_price)} · SL: ${fmtPrice(t.sl_price)}`);
+        playSound('open');
       } else if (prev === 'open' && t.status === 'tp_hit') {
         const pnl = t.pnl_usdt ? `+${parseFloat(t.pnl_usdt).toFixed(2)} USDT` : '';
         sendNotification(`✅ TP Hit: ${sym}`, `Exit @ ${fmtPrice(t.exit_price)} ${pnl}`);
+        playSound('tp');
       } else if (prev === 'open' && t.status === 'sl_hit') {
         const pnl = t.pnl_usdt ? `${parseFloat(t.pnl_usdt).toFixed(2)} USDT` : '';
         sendNotification(`🔴 SL Hit: ${sym}`, `Exit @ ${fmtPrice(t.exit_price)} ${pnl}`);
+        playSound('sl');
       } else if (prev === 'open' && t.status === 'closed') {
         sendNotification(`⬜ Closed: ${sym}`, `Exit @ ${fmtPrice(t.exit_price)}`);
+        playSound('close');
       }
       _prevTradeStates[t.trade_id] = t.status;
     });
