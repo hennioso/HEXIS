@@ -239,7 +239,7 @@ class Trader:
             f"SL: {sl_str} (structural) | "
             f"TP1: {sniper.tp1_price:.4f} (20%) | "
             f"TP2: {sniper.tp2_price:.4f} (50%) | "
-            f"TP3: {sniper.tp3_price:.4f} (25%, exchange safety) | "
+            f"TP3: {sniper.tp3_price:.4f} (25%) | "
             f"Swing: {sniper.swing_low:.4f}–{sniper.swing_high:.4f}"
         )
 
@@ -251,7 +251,6 @@ class Trader:
                 qty=str(qty),
                 order_type="MARKET",
                 sl_price=sl_str,
-                tp_price=tp3_str,
                 client_id=trade_id,
             )
             order_id = result.get("orderId", "")
