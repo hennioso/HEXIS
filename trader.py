@@ -392,8 +392,9 @@ class Trader:
             # Move SL to Break Even
             if not be_moved:
                 be_sl = str(round(entry_price, price_prec))
+                pos_side = "BUY" if direction == "long" else "SELL"
                 try:
-                    self.client.set_position_sl(self.symbol, be_sl)
+                    self.client.set_position_sl(self.symbol, be_sl, side=pos_side)
                     db.mark_sniper_be_moved(trade_id, entry_price)
                     logger.info(
                         f"SNIPER SL → BE | {self.symbol} | SL moved to {be_sl}"
