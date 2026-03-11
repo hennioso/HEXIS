@@ -2,6 +2,8 @@
 
 An automated futures trading bot for the **Bitunix** exchange. Trades BTC, ETH, SOL and XRP using two strategies — trend-following and mean-reversion scalping — with a live web dashboard for monitoring and manual control.
 
+![HEXIS Dashboard](screenshot.png)
+
 ---
 
 ## Features
