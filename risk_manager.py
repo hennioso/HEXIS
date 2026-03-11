@@ -1,0 +1,114 @@
+"""
+Risk Management
+Berechnet Positionsgröße, Stop Loss und Take Profit.
+"""
+
+from dataclasses import dataclass
+
+
+@dataclass
+class TradeParams:
+    qty: str            # Menge in BTC (als String für API)
+    tp_price: str       # Take Profit Preis
+    sl_price: str       # Stop Loss Preis
+    entry_price: float
+    notional_usdt: float  # Ungefährer Handelswert in USDT
+
+
+class RiskManager:
+    def __init__(
+        self,
+        risk_per_trade: float = 0.02,
+        stop_loss_pct: float = 0.015,
+        take_profit_pct: float = 0.030,
+        leverage: int = 10,
+        min_qty: float = 0.001,
+        qty_precision: int = 3,
+        price_precision: int = 1,
+        max_margin_usdt: float = None,   # Margin-Cap in USDT (None = kein Limit)
+        max_margin_trades: int = 0,      # Für wie viele Trades gilt der Cap
+    ):
+        self.risk_per_trade = risk_per_trade
+        self.stop_loss_pct = stop_loss_pct
+        self.take_profit_pct = take_profit_pct
+        self.leverage = leverage
+        self.min_qty = min_qty
+        self.qty_precision = qty_precision
+        self.price_precision = price_precision
+        self.max_margin_usdt = max_margin_usdt
+        self.max_margin_trades = max_margin_trades
+
+    def calculate(
+        self,
+        direction: str,
+        entry_price: float,
+        available_balance: float,
+        trade_count: int = 0,
+    ) -> TradeParams | None:
+        """
+        Berechnet Qty, TP und SL für einen Trade.
+        Gibt None zurück wenn die Positionsgröße zu klein ist.
+
+        direction: 'long' | 'short'
+        entry_price: Einstiegspreis in USDT
+        available_balance: Verfügbares USDT im Account
+        """
+        # Maximales Risiko in USDT
+        risk_usdt = available_balance * self.risk_per_trade
+
+        # Qty = risk_usdt / (entry_price * stop_loss_pct)
+        qty = risk_usdt / (entry_price * self.stop_loss_pct)
+        qty = round(qty, self.qty_precision)
+
+        # Margin-Cap für die ersten N Trades (Lernphase)
+        if (
+            self.max_margin_usdt is not None
+            and self.max_margin_trades > 0
+            and trade_count < self.max_margin_trades
+        ):
+            max_qty_from_cap = round(
+                (self.max_margin_usdt * self.leverage) / entry_price,
+                self.qty_precision,
+            )
+            if qty > max_qty_from_cap:
+                qty = max_qty_from_cap
+
+        if qty < self.min_qty:
+            return None  # Position zu klein
+
+        # Notional-Wert (ohne Hebel)
+        notional = qty * entry_price
+
+        # Sicherheitscheck: Notional darf nicht mehr als available_balance / leverage-adjustiert sein
+        max_notional = available_balance * self.leverage
+        if notional > max_notional:
+            qty = round(max_notional / entry_price, self.qty_precision)
+            if qty < self.min_qty:
+                return None
+
+        # Präzision dynamisch nach Preis – verhindert Rundungsfehler bei günstigen Coins
+        # BTC ~85000 → 1, ETH ~2000 → 2, SOL ~85 → 3, XRP ~1.3 → 4, DOGE ~0.1 → 5
+        if entry_price >= 10_000:
+            price_prec = 1
+        elif entry_price >= 100:
+            price_prec = 2
+        elif entry_price >= 1:
+            price_prec = 4
+        else:
+            price_prec = 5
+
+        # Stop Loss & Take Profit
+        if direction == "long":
+            sl_price = entry_price * (1 - self.stop_loss_pct)
+            tp_price = entry_price * (1 + self.take_profit_pct)
+        else:  # short
+            sl_price = entry_price * (1 + self.stop_loss_pct)
+            tp_price = entry_price * (1 - self.take_profit_pct)
+
+        return TradeParams(
+            qty=str(qty),
+            tp_price=str(round(tp_price, price_prec)),
+            sl_price=str(round(sl_price, price_prec)),
+            entry_price=entry_price,
+            notional_usdt=round(qty * entry_price, 2),
+        )
