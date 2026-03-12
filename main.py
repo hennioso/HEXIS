@@ -19,6 +19,7 @@ from exchange import BitunixClient
 from strategy import check_signal
 from strategy_scalp import check_scalp_signal, ScalpSignal
 from strategy_sniper import check_sniper_signal
+from strategy_lsob import check_lsob_signal
 from strategy import Signal
 from risk_manager import RiskManager
 from trader import Trader
@@ -98,6 +99,26 @@ def symbol_loop(
                     trader.open_sniper_position(sniper)
                 else:
                     log.debug("No SNIPER signal.")
+            elif strategy == "lsob":
+                klines_lsob = client.get_klines(
+                    symbol, config.LSOB_TF, limit=config.LSOB_KLINE_LIMIT
+                )
+                lsob = check_lsob_signal(
+                    klines=klines_lsob,
+                    lookback=config.LSOB_LOOKBACK,
+                    scan_depth=config.LSOB_SCAN_DEPTH,
+                )
+                if lsob:
+                    log.info(
+                        f"LSOB SIGNAL: {lsob.direction.upper()} | "
+                        f"Price: {lsob.price:.4f} | "
+                        f"OB: [{lsob.ob_bottom:.4f} – {lsob.ob_top:.4f}] | "
+                        f"Sweep: {lsob.sweep_price:.4f} | "
+                        f"SL: {lsob.sl_price:.4f} | TP: {lsob.tp_price:.4f}"
+                    )
+                    trader.open_lsob_position(lsob)
+                else:
+                    log.debug("No LSOB signal.")
             elif strategy == "scalp":
                 scalp = check_scalp_signal(
                     klines_5m=klines_5m,

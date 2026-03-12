@@ -11,6 +11,7 @@ from exchange import BitunixClient
 from strategy import Signal
 from risk_manager import RiskManager, TradeParams
 from strategy_sniper import SniperSignal
+from strategy_lsob import LSOBSignal
 import database as db
 
 logger = logging.getLogger(__name__)
@@ -369,6 +370,141 @@ class Trader:
             return result
         except Exception as e:
             logger.error(f"SNIPER order failed: {e}")
+            return None
+
+    def open_lsob_position(self, lsob: LSOBSignal) -> Optional[dict]:
+        """
+        Opens an LSOB (Liquidity Sweep Orderblock) position.
+        Entry at market price when price is inside the OB zone.
+        SL is placed structurally beyond the sweep wick.
+        TP targets the prior opposite liquidity.
+        """
+        if self.has_open_position():
+            logger.warning("Position already open – skipping LSOB trade.")
+            return None
+
+        existing = [t for t in db.get_all_trades(limit=20)
+                    if t["status"] == "open" and t["symbol"] == self.symbol]
+        if existing:
+            logger.warning(f"DB already has an open trade for {self.symbol} – skipping LSOB.")
+            return None
+
+        # Block re-entry on the same OB zone (same sweep price within 0.3%)
+        if self._last_sniper_swing is not None:
+            last_high, last_low = self._last_sniper_swing
+            sweep = lsob.sweep_price
+            if lsob.direction == "short":
+                if abs(sweep - last_high) / last_high < 0.003:
+                    logger.info(f"LSOB: same sweep high as last trade — skipping re-entry")
+                    return None
+            else:
+                if abs(sweep - last_low) / last_low < 0.003:
+                    logger.info(f"LSOB: same sweep low as last trade — skipping re-entry")
+                    return None
+
+        balance = self.get_available_balance()
+        if balance < 10:
+            logger.error(f"Insufficient capital: {balance:.2f} USDT")
+            return None
+
+        trade_count = db.get_trade_count()
+        entry_price = lsob.price
+
+        # Dynamic price precision
+        if entry_price >= 10_000:
+            price_prec = 1
+        elif entry_price >= 100:
+            price_prec = 2
+        elif entry_price >= 1:
+            price_prec = 4
+        else:
+            price_prec = 5
+
+        # Size by structural SL distance
+        risk_usdt = balance * self.rm.risk_per_trade
+        sl_dist   = abs(entry_price - lsob.sl_price)
+        if sl_dist == 0:
+            return None
+        qty = round(risk_usdt / sl_dist, self.rm.qty_precision)
+
+        # Hard margin cap
+        max_qty_margin = round(
+            (balance * self.rm.max_margin_pct * self.rm.leverage) / entry_price,
+            self.rm.qty_precision,
+        )
+        if qty > max_qty_margin:
+            qty = max_qty_margin
+
+        # Learning phase cap
+        if (
+            self.rm.max_margin_usdt is not None
+            and self.rm.max_margin_trades > 0
+            and trade_count < self.rm.max_margin_trades
+        ):
+            max_qty = round(
+                (self.rm.max_margin_usdt * self.rm.leverage) / entry_price,
+                self.rm.qty_precision,
+            )
+            if qty > max_qty:
+                qty = max_qty
+
+        if qty < self.rm.min_qty:
+            logger.warning("LSOB position size too small – skipping.")
+            return None
+
+        max_notional = balance * self.rm.leverage
+        if qty * entry_price > max_notional:
+            qty = round(max_notional / entry_price, self.rm.qty_precision)
+            if qty < self.rm.min_qty:
+                return None
+
+        side     = "BUY" if lsob.direction == "long" else "SELL"
+        trade_id = f"lsob_{uuid.uuid4().hex[:16]}"
+        sl_str   = str(round(lsob.sl_price, price_prec))
+        tp_str   = str(round(lsob.tp_price, price_prec))
+
+        logger.info(
+            f"LSOB OPEN | {lsob.direction.upper()} | "
+            f"Qty: {qty} | Entry: {entry_price:.4f} | "
+            f"OB: [{lsob.ob_bottom:.4f} – {lsob.ob_top:.4f}] | "
+            f"Sweep: {lsob.sweep_price:.4f} | "
+            f"SL: {sl_str} | TP: {tp_str}"
+        )
+
+        try:
+            result = self.client.place_order(
+                symbol=self.symbol,
+                side=side,
+                trade_side="OPEN",
+                qty=_qty_str(qty),
+                order_type="MARKET",
+                sl_price=sl_str,
+                tp_price=tp_str,
+                client_id=trade_id,
+            )
+            order_id = result.get("orderId", "")
+            logger.info(f"LSOB order placed: {result}")
+
+            db.open_trade(
+                trade_id=trade_id,
+                order_id=order_id,
+                symbol=self.symbol,
+                direction=lsob.direction,
+                qty=float(qty),
+                entry_price=entry_price,
+                tp_price=lsob.tp_price,
+                sl_price=lsob.sl_price,
+                strategy="lsob",
+            )
+            self._current_trade_id = trade_id
+            # Store sweep as re-entry guard
+            if lsob.direction == "short":
+                self._last_sniper_swing = (lsob.sweep_price, lsob.ob_bottom)
+            else:
+                self._last_sniper_swing = (lsob.ob_top, lsob.sweep_price)
+            return result
+        except Exception as e:
+            logger.error(f"LSOB order failed: {e}")
             return None
 
     def monitor_sniper_tps(self) -> None:

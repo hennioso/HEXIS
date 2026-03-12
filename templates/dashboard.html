@@ -373,6 +373,7 @@
     .strat-scalp  { background: rgba(63,185,80,0.15);   color: var(--green); }
     .strat-sniper { background: rgba(188,140,255,0.15); color: #c792ea; }
     .strat-fib    { background: rgba(188,140,255,0.15); color: #c792ea; }
+    .strat-lsob   { background: rgba(210,153,34,0.15);  color: var(--yellow); }
 
     /* Status Badge */
     .status-badge {
@@ -417,6 +418,7 @@
     .strat-btn.active-trend  { background: rgba(88,166,255,0.15);  color: var(--blue);   border-color: var(--blue); }
     .strat-btn.active-scalp  { background: rgba(63,185,80,0.15);   color: var(--green);  border-color: var(--green); }
     .strat-btn.active-sniper { background: rgba(188,140,255,0.15); color: var(--purple); border-color: var(--purple); }
+    .strat-btn.active-lsob   { background: rgba(210,153,34,0.15);  color: var(--yellow); border-color: var(--yellow); }
 
     /* ---- Day Filter Buttons ---- */
     .day-btn {
@@ -487,6 +489,7 @@
         <button class="strat-btn" data-strat="trend"   onclick="setStrategy('BTCUSDT','trend',event)">TREND</button>
         <button class="strat-btn" data-strat="scalp"   onclick="setStrategy('BTCUSDT','scalp',event)">SCALP</button>
         <button class="strat-btn" data-strat="sniper"  onclick="setStrategy('BTCUSDT','sniper',event)">SNIPER</button>
+        <button class="strat-btn" data-strat="lsob"    onclick="setStrategy('BTCUSDT','lsob',event)">LSOB</button>
       </div>
     </div>
     <div class="sym-card" data-symbol="ETHUSDT">
@@ -497,6 +500,7 @@
         <button class="strat-btn" data-strat="trend"   onclick="setStrategy('ETHUSDT','trend',event)">TREND</button>
         <button class="strat-btn" data-strat="scalp"   onclick="setStrategy('ETHUSDT','scalp',event)">SCALP</button>
         <button class="strat-btn" data-strat="sniper"  onclick="setStrategy('ETHUSDT','sniper',event)">SNIPER</button>
+        <button class="strat-btn" data-strat="lsob"    onclick="setStrategy('ETHUSDT','lsob',event)">LSOB</button>
       </div>
     </div>
     <div class="sym-card" data-symbol="SOLUSDT">
@@ -507,6 +511,7 @@
         <button class="strat-btn" data-strat="trend"   onclick="setStrategy('SOLUSDT','trend',event)">TREND</button>
         <button class="strat-btn" data-strat="scalp"   onclick="setStrategy('SOLUSDT','scalp',event)">SCALP</button>
         <button class="strat-btn" data-strat="sniper"  onclick="setStrategy('SOLUSDT','sniper',event)">SNIPER</button>
+        <button class="strat-btn" data-strat="lsob"    onclick="setStrategy('SOLUSDT','lsob',event)">LSOB</button>
       </div>
     </div>
     <div class="sym-card" data-symbol="XRPUSDT">
@@ -517,6 +522,7 @@
         <button class="strat-btn" data-strat="trend"   onclick="setStrategy('XRPUSDT','trend',event)">TREND</button>
         <button class="strat-btn" data-strat="scalp"   onclick="setStrategy('XRPUSDT','scalp',event)">SCALP</button>
         <button class="strat-btn" data-strat="sniper"  onclick="setStrategy('XRPUSDT','sniper',event)">SNIPER</button>
+        <button class="strat-btn" data-strat="lsob"    onclick="setStrategy('XRPUSDT','lsob',event)">LSOB</button>
       </div>
     </div>
     <div class="sym-card" data-symbol="BNBUSDT">
@@ -527,6 +533,7 @@
         <button class="strat-btn" data-strat="trend"   onclick="setStrategy('BNBUSDT','trend',event)">TREND</button>
         <button class="strat-btn" data-strat="scalp"   onclick="setStrategy('BNBUSDT','scalp',event)">SCALP</button>
         <button class="strat-btn" data-strat="sniper"  onclick="setStrategy('BNBUSDT','sniper',event)">SNIPER</button>
+        <button class="strat-btn" data-strat="lsob"    onclick="setStrategy('BNBUSDT','lsob',event)">LSOB</button>
       </div>
     </div>
     <div class="sym-card" data-symbol="HYPEUSDT">
@@ -537,6 +544,7 @@
         <button class="strat-btn" data-strat="trend"   onclick="setStrategy('HYPEUSDT','trend',event)">TREND</button>
         <button class="strat-btn" data-strat="scalp"   onclick="setStrategy('HYPEUSDT','scalp',event)">SCALP</button>
         <button class="strat-btn" data-strat="sniper"  onclick="setStrategy('HYPEUSDT','sniper',event)">SNIPER</button>
+        <button class="strat-btn" data-strat="lsob"    onclick="setStrategy('HYPEUSDT','lsob',event)">LSOB</button>
       </div>
     </div>
     <div class="sym-card" data-symbol="ADAUSDT">
@@ -547,6 +555,7 @@
         <button class="strat-btn" data-strat="trend"   onclick="setStrategy('ADAUSDT','trend',event)">TREND</button>
         <button class="strat-btn" data-strat="scalp"   onclick="setStrategy('ADAUSDT','scalp',event)">SCALP</button>
         <button class="strat-btn" data-strat="sniper"  onclick="setStrategy('ADAUSDT','sniper',event)">SNIPER</button>
+        <button class="strat-btn" data-strat="lsob"    onclick="setStrategy('ADAUSDT','lsob',event)">LSOB</button>
       </div>
     </div>
   </div>
@@ -921,6 +930,8 @@
     const m = (t.trend_15m || '').toLowerCase();
     if (s === 'sniper' || m === 'sniper')
       return '<span class="strat-badge strat-sniper">SNIPER</span>';
+    if (s === 'lsob' || m === 'lsob')
+      return '<span class="strat-badge strat-lsob">LSOB</span>';
     if (m === 'scalp')
       return '<span class="strat-badge strat-scalp">SCALP</span>';
     if (m === 'bull' || m === 'bear')
@@ -1209,7 +1220,7 @@
       const container = document.getElementById('strat-' + symbol);
       if (!container) continue;
       container.querySelectorAll('.strat-btn').forEach(btn => {
-        btn.classList.remove('active-trend', 'active-scalp', 'active-sniper');
+        btn.classList.remove('active-trend', 'active-scalp', 'active-sniper', 'active-lsob');
         if (btn.dataset.strat === strat) btn.classList.add('active-' + strat);
       });
     }
