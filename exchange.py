@@ -219,6 +219,21 @@ class BitunixClient:
         data = self._post("/api/v1/futures/trade/set_tpsl", body=body)
         return data.get("data", {})
 
+    def get_order_history(self, symbol: str, limit: int = 20) -> list[dict]:
+        """
+        Fetch recent filled/closed orders for a symbol.
+        Used to get the actual exit price of a closed position.
+        """
+        params = {"symbol": symbol, "limit": limit}
+        try:
+            data = self._get("/api/v1/futures/trade/get_order_list", params=params)
+            result = data.get("data", [])
+            if isinstance(result, list):
+                return result
+            return result.get("orderList", [])
+        except Exception:
+            return []
+
     def cancel_all_orders(self, symbol: str) -> dict:
         """Cancel all open orders for a symbol."""
         body = {"symbol": symbol}

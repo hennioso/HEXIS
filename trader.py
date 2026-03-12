@@ -83,18 +83,24 @@ class Trader:
 
     def _sync_closed_position(self, trade_id: str):
         """Detects externally closed positions and updates status + PnL in DB."""
-        try:
-            ticker = self.client.get_ticker(self.symbol)
-            exit_price = float(ticker.get("lastPrice", ticker.get("close", 0)))
-        except Exception:
-            exit_price = 0.0
+        trade = db.get_trade(trade_id)
+
+        # Try to get actual exit price from order history (most accurate)
+        exit_price = self._get_actual_exit_price(trade_id, trade)
+
+        # Fallback: current ticker price (less accurate — price may have moved)
+        if not exit_price:
+            try:
+                ticker = self.client.get_ticker(self.symbol)
+                exit_price = float(ticker.get("lastPrice", ticker.get("close", 0)))
+            except Exception:
+                exit_price = 0.0
 
         if not exit_price:
             self._current_trade_id = None
             return
 
-        # Determine TP or SL from DB entry
-        trade = db.get_trade(trade_id)
+        # Determine TP or SL status from actual exit price vs stored levels
         status = "closed"
         if trade:
             tp = float(trade.get("tp_price") or 0)
@@ -117,6 +123,35 @@ class Trader:
             f"Exit: {exit_price:.4f} | trade_id: {trade_id}"
         )
         self._current_trade_id = None
+
+    def _get_actual_exit_price(self, trade_id: str, trade: dict | None) -> float:
+        """
+        Attempts to find the actual execution price of the last CLOSE order
+        from Bitunix order history. Returns 0.0 if not found.
+        """
+        if not trade:
+            return 0.0
+        try:
+            orders = self.client.get_order_history(self.symbol, limit=20)
+            entry_time = trade.get("entry_time", "")
+            # Look for the most recent filled CLOSE order after entry
+            for order in orders:
+                order_trade_side = order.get("tradeSide", order.get("trade_side", ""))
+                order_status = order.get("status", "")
+                avg_price = float(order.get("avgPrice", order.get("avg_price", 0)) or 0)
+                order_time = order.get("updateTime", order.get("createTime", ""))
+
+                if (
+                    order_trade_side.upper() == "CLOSE"
+                    and order_status.upper() in ("FILLED", "FULL_FILLED")
+                    and avg_price > 0
+                    and str(order_time) >= entry_time.replace("-", "").replace("T", "").replace(":", "")[:12]
+                ):
+                    logger.debug(f"Actual exit price from order history: {avg_price:.4f}")
+                    return avg_price
+        except Exception as e:
+            logger.debug(f"Order history lookup failed: {e}")
+        return 0.0
 
     def get_available_balance(self) -> float:
         balance = self.client.get_balance("USDT")
