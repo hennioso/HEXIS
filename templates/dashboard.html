@@ -827,9 +827,13 @@
         <td style="color:var(--green);font-size:12px">${t.tp_price ? fmtPrice(t.tp_price) : '—'}</td>
         <td style="color:var(--red);font-size:12px">${t.sl_price ? fmtPrice(t.sl_price) : '—'}</td>
         <td>${t.status === 'open'
-            ? (t.unrealized_pnl != null
-                ? `<span style="font-size:11px;color:var(--muted)">uPnL </span>${fmtPnl(t.unrealized_pnl)}`
-                : '<span style="color:var(--muted)">—</span>')
+            ? (() => {
+                const upnl    = t.unrealized_pnl != null ? fmtPnl(t.unrealized_pnl) : '<span style="color:var(--muted)">—</span>';
+                const partial = t.partial_pnl_usdt
+                    ? `<br><span style="font-size:10px;color:var(--muted)">+${parseFloat(t.partial_pnl_usdt).toFixed(2)} taken</span>`
+                    : '';
+                return `<span style="font-size:11px;color:var(--muted)">uPnL </span>${upnl}${partial}`;
+              })()
             : fmtPnl(t.pnl_usdt)}</td>
         <td>${statusBadge(t.status)}</td>
         <td style="color:var(--muted)">${t.rsi_entry ? fmt(t.rsi_entry, 1) : '—'}</td>

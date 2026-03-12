@@ -47,8 +47,9 @@ def init_db():
         _add_column_if_missing(conn, "trades", "tp1_hit",    "INTEGER DEFAULT 0")
         _add_column_if_missing(conn, "trades", "tp2_hit",    "INTEGER DEFAULT 0")
         _add_column_if_missing(conn, "trades", "tp3_hit",    "INTEGER DEFAULT 0")
-        _add_column_if_missing(conn, "trades", "be_moved",      "INTEGER DEFAULT 0")
-        _add_column_if_missing(conn, "trades", "unrealized_pnl", "REAL")
+        _add_column_if_missing(conn, "trades", "be_moved",        "INTEGER DEFAULT 0")
+        _add_column_if_missing(conn, "trades", "unrealized_pnl",  "REAL")
+        _add_column_if_missing(conn, "trades", "partial_pnl_usdt","REAL")
         conn.commit()
 
 
@@ -224,6 +225,16 @@ def update_unrealized_pnl(trade_id: str, pnl: float):
     with _connect() as conn:
         conn.execute(
             "UPDATE trades SET unrealized_pnl=? WHERE trade_id=?",
+            (round(pnl, 4), trade_id),
+        )
+        conn.commit()
+
+
+def add_partial_pnl(trade_id: str, pnl: float):
+    """Adds realized PnL from a partial close to the running total."""
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE trades SET partial_pnl_usdt = COALESCE(partial_pnl_usdt, 0) + ? WHERE trade_id=?",
             (round(pnl, 4), trade_id),
         )
         conn.commit()
