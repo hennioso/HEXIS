@@ -113,23 +113,36 @@ def close_trade(trade_id: str, exit_price: float, status: str = "closed"):
     """
     Closes a trade and calculates PnL.
     status: 'closed' | 'tp_hit' | 'sl_hit'
+    For SNIPER trades with partial TPs, the remaining qty is computed from
+    which TP levels were hit; partial_pnl_usdt is added to the final PnL.
     """
     with _connect() as conn:
         row = conn.execute(
-            "SELECT direction, qty, entry_price FROM trades WHERE trade_id = ?",
+            """SELECT direction, qty, entry_price,
+                      tp1_hit, tp2_hit, tp3_hit, partial_pnl_usdt
+               FROM trades WHERE trade_id = ?""",
             (trade_id,),
         ).fetchone()
         if row is None:
             return
 
-        direction = row["direction"]
-        qty = row["qty"]
+        direction   = row["direction"]
+        qty         = row["qty"]
         entry_price = row["entry_price"]
+        partial_pnl = row["partial_pnl_usdt"] or 0.0
+
+        # For SNIPER partial closes: only the remaining fraction is closed here
+        closed_frac = (
+            0.20 * (row["tp1_hit"] or 0)
+            + 0.50 * (row["tp2_hit"] or 0)
+            + 0.25 * (row["tp3_hit"] or 0)
+        )
+        remaining_qty = qty * (1.0 - closed_frac)
 
         if direction == "long":
-            pnl = (exit_price - entry_price) * qty
+            pnl = (exit_price - entry_price) * remaining_qty + partial_pnl
         else:
-            pnl = (entry_price - exit_price) * qty
+            pnl = (entry_price - exit_price) * remaining_qty + partial_pnl
 
         conn.execute(
             """UPDATE trades
