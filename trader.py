@@ -255,8 +255,9 @@ class Trader:
         # after a quick SL/BE hit while price is still at the 0.882 level)
         if self._last_sniper_swing is not None:
             last_high, last_low = self._last_sniper_swing
-            if (abs(sniper.swing_high - last_high) / last_high < 0.001 and
-                    abs(sniper.swing_low - last_low) / last_low < 0.001):
+            high_match = abs(sniper.swing_high - last_high) / last_high < 0.003
+            low_match  = abs(sniper.swing_low  - last_low)  / last_low  < 0.003
+            if high_match or low_match:
                 logger.info(
                     f"SNIPER: same Fibonacci swing as last trade "
                     f"({last_low:.4f}–{last_high:.4f}) — skipping re-entry"
