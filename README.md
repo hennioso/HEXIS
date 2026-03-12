@@ -2,6 +2,8 @@
 
 An automated futures trading agent for the **Bitunix** exchange. Trades multiple symbols in parallel using three strategies — trend-following, scalping, and Fibonacci sniper — with a live web dashboard for monitoring and manual control.
 
+> **Status: Active Test Phase** — The agent is currently running live with real capital in a controlled test environment. Position sizes are intentionally limited while strategies are being validated and refined.
+
 ![HEXIS Dashboard](screenshot.png)
 
 ![HEXIS Terminal](screenshot_terminal.png)
