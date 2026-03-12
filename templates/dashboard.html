@@ -455,6 +455,7 @@
   </h1>
   <div class="update-info" style="text-align:right;display:flex;align-items:center;gap:12px">
     <button id="notify-btn" onclick="requestNotifications()" style="display:none;padding:4px 10px;font-size:11px;background:rgba(88,166,255,0.1);color:#58a6ff;border:1px solid rgba(88,166,255,0.3);border-radius:6px;cursor:pointer">🔔 Enable Notifications</button>
+    <button id="sync-btn" onclick="syncClosed()" style="padding:4px 10px;font-size:11px;background:rgba(63,185,80,0.1);color:#3fb950;border:1px solid rgba(63,185,80,0.3);border-radius:6px;cursor:pointer">⟳ Sync Trades</button>
     <span class="refresh-info" id="last-update">Loading...</span>
   </div>
 </header>
@@ -1148,6 +1149,21 @@
     const now = new Date();
     document.getElementById('last-update').textContent =
       `Last updated: ${now.toLocaleTimeString('en-GB')} · Auto-refresh in 30s`;
+  }
+
+  async function syncClosed() {
+    const btn = document.getElementById('sync-btn');
+    btn.textContent = '⟳ Syncing...';
+    btn.disabled = true;
+    try {
+      await fetch('/api/sync_closed', { method: 'POST' });
+      await refresh();
+      btn.textContent = '✓ Synced';
+      setTimeout(() => { btn.textContent = '⟳ Sync Trades'; btn.disabled = false; }, 2000);
+    } catch (e) {
+      btn.textContent = '✗ Error';
+      setTimeout(() => { btn.textContent = '⟳ Sync Trades'; btn.disabled = false; }, 2000);
+    }
   }
 
   // Initial load + auto-refresh every 30 seconds

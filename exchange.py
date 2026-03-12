@@ -241,6 +241,23 @@ class BitunixClient:
         data = self._post("/api/v1/futures/tpsl/place_order", body=body)
         return data.get("data", {})
 
+    def get_history_positions(self, symbol: str = None, limit: int = 100) -> list[dict]:
+        """
+        Fetch recently closed positions from the exchange.
+        Used for hourly reconciliation of closed trades.
+        """
+        params = {"limit": limit}
+        if symbol:
+            params["symbol"] = symbol
+        try:
+            data = self._get("/api/v1/futures/position/get_history_positions", params=params)
+            result = data.get("data", [])
+            if isinstance(result, list):
+                return result
+            return result.get("positionList", result.get("list", []))
+        except Exception:
+            return []
+
     def get_order_history(self, symbol: str, limit: int = 20) -> list[dict]:
         """
         Fetch recent filled/closed orders for a symbol.
