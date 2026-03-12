@@ -561,6 +561,7 @@
   <!-- Stats -->
   <div class="stats-grid" id="stats-grid">
     <div class="stat-card"><div class="label">Total PnL</div><div class="value" id="s-pnl">—</div></div>
+    <div class="stat-card"><div class="label">ROI</div><div class="value" id="s-roi">—</div><div class="sub" id="s-roi-sub">of account equity</div></div>
     <div class="stat-card"><div class="label">Win Rate</div><div class="value" id="s-winrate">—</div></div>
     <div class="stat-card"><div class="label">Total Trades</div><div class="value blue" id="s-total">—</div></div>
     <div class="stat-card"><div class="label">Open Positions</div><div class="value yellow" id="s-open">—</div></div>
@@ -658,6 +659,15 @@
 <script>
   let pnlChart = null;
   let donutChart = null;
+  let _totalEquity = 0;
+  let _totalPnl = 0;
+
+  function updateRoi() {
+    if (_totalEquity <= 0) return;
+    const roi = (_totalPnl / _totalEquity) * 100;
+    const el = document.getElementById('s-roi');
+    el.innerHTML = `<span class="${roi >= 0 ? 'green' : 'red'}">${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%</span>`;
+  }
 
   function fmt(n, decimals = 2) {
     if (n === null || n === undefined) return '—';
@@ -695,6 +705,8 @@
     const s = await r.json();
 
     const pnl = parseFloat(s.total_pnl || 0);
+    _totalPnl = pnl;
+    updateRoi();
     document.getElementById('s-pnl').innerHTML =
       `<span class="${pnl >= 0 ? 'green' : 'red'}">${pnl >= 0 ? '+' : ''}${fmt(pnl)} $</span>`;
     document.getElementById('s-winrate').innerHTML =
@@ -1079,6 +1091,8 @@
       const margin    = b.margin;
       const upnl      = b.unrealized_pnl;
       const total     = available + margin + upnl;
+      _totalEquity = total;
+      updateRoi();
 
       document.getElementById('b-available').textContent = `${fmt(available)} USDT`;
       document.getElementById('b-margin').textContent    = `${fmt(margin)} USDT`;
