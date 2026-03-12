@@ -425,6 +425,8 @@ class Trader:
                         reduce_only=True,
                     )
                     db.mark_sniper_tp(trade_id, 1)
+                    pnl_tp1 = qty_tp1 * abs(price - entry_price) * (1 if direction == "long" else 1)
+                    db.add_partial_pnl(trade_id, round(pnl_tp1, 4))
                     logger.info(
                         f"SNIPER TP1 | {self.symbol} | Closed 20% ({qty_tp1}) @ {price:.4f}"
                     )
@@ -459,6 +461,8 @@ class Trader:
                         reduce_only=True,
                     )
                     db.mark_sniper_tp(trade_id, 2)
+                    pnl_tp2 = qty_tp2 * abs(price - entry_price)
+                    db.add_partial_pnl(trade_id, round(pnl_tp2, 4))
                     logger.info(
                         f"SNIPER TP2 | {self.symbol} | Closed 50% ({qty_tp2}) @ {price:.4f}"
                     )
@@ -479,6 +483,8 @@ class Trader:
                         reduce_only=True,
                     )
                     db.mark_sniper_tp(trade_id, 3)
+                    pnl_tp3 = qty_tp3 * abs(price - entry_price)
+                    db.add_partial_pnl(trade_id, round(pnl_tp3, 4))
                     logger.info(
                         f"SNIPER TP3 | {self.symbol} | Closed 25% ({qty_tp3}) @ {price:.4f} | "
                         f"5% running open-end with BE stop"
