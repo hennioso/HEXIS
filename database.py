@@ -248,6 +248,24 @@ def mark_sniper_tp(trade_id: str, tp_num: int):
         conn.commit()
 
 
+def correct_closed_trade(trade_id: str, exit_price: float, pnl_usdt: float, close_time: str = None):
+    """
+    Overwrite exit_price and pnl_usdt for a trade with exchange-sourced data.
+    Used by the hourly closed-trade sync. close_time is optional (ISO string).
+    """
+    with _connect() as conn:
+        conn.execute(
+            """UPDATE trades
+               SET exit_price=?, pnl_usdt=?,
+                   exit_time=COALESCE(?, exit_time),
+                   status=CASE WHEN status='open' THEN 'closed' ELSE status END,
+                   unrealized_pnl=NULL
+               WHERE trade_id=?""",
+            (exit_price, round(pnl_usdt, 4), close_time, trade_id),
+        )
+        conn.commit()
+
+
 def mark_sniper_be_moved(trade_id: str, new_sl: float):
     """Record that SL was moved to Break Even after TP1."""
     with _connect() as conn:

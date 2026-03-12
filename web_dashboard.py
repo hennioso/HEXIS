@@ -5,6 +5,8 @@ Open:  http://localhost:5000
 """
 
 import time
+import threading
+import logging
 from flask import Flask, render_template, jsonify, request
 import database as db
 import config
@@ -16,7 +18,10 @@ app = Flask(__name__)
 _client = BitunixClient(config.API_KEY, config.SECRET_KEY)
 
 _last_sync: float = 0.0
-_SYNC_INTERVAL: float = 10.0  # seconds between exchange syncs
+_SYNC_INTERVAL: float = 10.0  # seconds between open-position syncs
+
+_last_closed_sync: float = 0.0
+_CLOSED_SYNC_INTERVAL: float = 3600.0  # 1 hour between closed-trade reconciliation
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -97,6 +102,135 @@ def _sync_open_trades():
                 status = "sl_hit"
 
         db.close_trade(trade_id=trade["trade_id"], exit_price=exit_price, status=status)
+
+
+def _sync_closed_trades(force: bool = False):
+    """
+    Hourly: fetch position history from the exchange and reconcile with DB.
+
+    Two cases handled:
+      1. Trade still 'open' in DB but no longer on the exchange → auto-close with
+         the actual exit price and PnL from the exchange.
+      2. Trade already closed in DB but exit price differs by >0.5% from exchange
+         → correct the price and PnL so the stats remain accurate.
+
+    Matching logic: same symbol + direction + entry price within 0.5%.
+    """
+    global _last_closed_sync
+    now = time.time()
+    if not force and now - _last_closed_sync < _CLOSED_SYNC_INTERVAL:
+        return
+    _last_closed_sync = now
+
+    log = logging.getLogger("closed_sync")
+    log.info("Hourly closed trade sync starting...")
+
+    try:
+        history = _client.get_history_positions(limit=100)
+    except Exception as e:
+        log.warning(f"Hourly closed sync — exchange fetch failed: {e}")
+        return
+
+    if not history:
+        log.info("Hourly closed sync — no history returned from exchange")
+        return
+
+    # Fetch currently live positions ONCE — used to guard against closing
+    # partially-TP'd trades that still appear in history (partial close events)
+    try:
+        live_positions = _client.get_open_positions()
+        # Key: (symbol, side) — e.g. ("BNBUSDT", "BUY")
+        live_keys = {
+            (p.get("symbol", ""), p.get("side", "").upper())
+            for p in live_positions
+            if float(p.get("qty", 0)) > 0
+        }
+    except Exception:
+        live_keys = set()
+
+    all_trades = db.get_all_trades(limit=200)
+    closed_now = 0
+    corrected = 0
+
+    for pos in history:
+        symbol    = pos.get("symbol", "")
+        side      = pos.get("side", "").upper()
+        direction = "long" if side == "BUY" else "short"
+
+        # Bitunix may use different field names across versions
+        avg_open = float(
+            pos.get("openPrice") or pos.get("avgOpenPrice") or
+            pos.get("entryPrice") or pos.get("avgEntryPrice") or 0
+        )
+        avg_close = float(
+            pos.get("closePrice") or pos.get("avgClosePrice") or
+            pos.get("exitPrice") or pos.get("avgExitPrice") or 0
+        )
+        ex_pnl = float(
+            pos.get("realizedPNL") or pos.get("realizedPnl") or
+            pos.get("pnl") or pos.get("profit") or 0
+        )
+        close_time = pos.get("closeTime") or pos.get("updateTime")
+
+        if not avg_open or not avg_close:
+            continue
+
+        for trade in all_trades:
+            if trade["symbol"] != symbol or trade["direction"] != direction:
+                continue
+            db_entry = float(trade.get("entry_price") or 0)
+            if not db_entry or abs(avg_open - db_entry) / db_entry > 0.005:
+                continue
+
+            # ── Match found ──────────────────────────────────────────────────
+            status  = trade.get("status", "open")
+            db_exit = float(trade.get("exit_price") or 0)
+            db_pnl  = float(trade.get("pnl_usdt") or 0)
+
+            if status == "open":
+                # Skip if the position is still live on the exchange.
+                # Partial-TP events (SNIPER TP1/TP2) produce history entries
+                # but the remaining qty is still open — we must NOT close those.
+                exchange_side = "BUY" if direction == "long" else "SELL"
+                if (symbol, exchange_side) in live_keys:
+                    break  # still open, leave DB as-is
+                db.correct_closed_trade(trade["trade_id"], avg_close, ex_pnl, close_time)
+                log.info(
+                    f"[AUTO-CLOSE] {symbol} {direction} | "
+                    f"exit={avg_close:.4f} | pnl={ex_pnl:+.4f} USDT"
+                )
+                closed_now += 1
+
+            elif db_exit and abs(avg_close - db_exit) / max(db_exit, 0.0001) > 0.005:
+                log.info(
+                    f"[PRICE-FIX]  {symbol} {direction} | "
+                    f"exit: DB={db_exit:.4f} → exchange={avg_close:.4f} | "
+                    f"pnl: DB={db_pnl:+.4f} → exchange={ex_pnl:+.4f} USDT"
+                )
+                db.correct_closed_trade(trade["trade_id"], avg_close, ex_pnl, close_time)
+                corrected += 1
+
+            break  # stop searching after first match for this exchange position
+
+    log.info(
+        f"Hourly closed sync done — "
+        f"{closed_now} auto-closed, {corrected} price correction(s), "
+        f"{len(history)} positions checked"
+    )
+
+
+def _start_background_sync():
+    """Start the background thread for hourly closed-trade reconciliation."""
+    def _loop():
+        while True:
+            try:
+                _sync_closed_trades()
+            except Exception as e:
+                logging.getLogger("closed_sync").error(f"Sync thread error: {e}", exc_info=True)
+            time.sleep(60)  # check every minute; rate-limited by _CLOSED_SYNC_INTERVAL
+
+    t = threading.Thread(target=_loop, daemon=True, name="closed_sync")
+    t.start()
 
 
 @app.route("/api/stats")
@@ -218,6 +352,16 @@ def api_set_strategy():
     return jsonify({"ok": True, "symbol": symbol, "strategy": strat})
 
 
+@app.route("/api/sync_closed", methods=["POST"])
+def api_sync_closed():
+    """Manually trigger the closed trade reconciliation (ignores the 1h rate limit)."""
+    try:
+        _sync_closed_trades(force=True)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/close_position", methods=["POST"])
 def api_close_position():
     """Manually close an open position via market order."""
@@ -269,5 +413,6 @@ def api_close_position():
 
 if __name__ == "__main__":
     db.init_db()
+    _start_background_sync()
     print("Dashboard running at http://localhost:5000")
     app.run(host="0.0.0.0", port=5000, debug=False)
