@@ -123,10 +123,13 @@ def api_price():
     symbol = request.args.get("symbol", config.SYMBOL)
     try:
         ticker = _client.get_ticker(symbol)
+        last  = float(ticker.get("lastPrice", ticker.get("close", 0)))
+        open_ = float(ticker.get("open", 0))
+        change_pct = round((last - open_) / open_ * 100, 2) if open_ else 0.0
         return jsonify({
             "symbol":     symbol,
-            "price":      float(ticker.get("lastPrice", ticker.get("close", 0))),
-            "change_pct": float(ticker.get("priceChangePercent", ticker.get("change", 0))),
+            "price":      last,
+            "change_pct": change_pct,
             "high_24h":   float(ticker.get("high", 0)),
             "low_24h":    float(ticker.get("low", 0)),
         })
@@ -141,10 +144,13 @@ def api_prices():
     for symbol in config.SYMBOLS:
         try:
             t = _client.get_ticker(symbol)
+            last  = float(t.get("lastPrice", t.get("close", 0)))
+            open_ = float(t.get("open", 0))
+            change_pct = round((last - open_) / open_ * 100, 2) if open_ else 0.0
             results.append({
                 "symbol":     symbol,
-                "price":      float(t.get("lastPrice", t.get("close", 0))),
-                "change_pct": float(t.get("priceChangePercent", t.get("change", 0))),
+                "price":      last,
+                "change_pct": change_pct,
             })
         except Exception:
             results.append({"symbol": symbol, "price": 0, "change_pct": 0})
