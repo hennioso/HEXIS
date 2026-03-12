@@ -1,6 +1,6 @@
 # HEXIS – Autonomous Crypto Agent
 
-An automated futures trading bot for the **Bitunix** exchange. Trades BTC, ETH, SOL and XRP using two strategies — trend-following and mean-reversion scalping — with a live web dashboard for monitoring and manual control.
+An automated futures trading agent for the **Bitunix** exchange. Trades multiple symbols in parallel using three strategies — trend-following, scalping, and Fibonacci sniper — with a live web dashboard for monitoring and manual control.
 
 ![HEXIS Dashboard](screenshot.png)
 
@@ -10,15 +10,21 @@ An automated futures trading bot for the **Bitunix** exchange. Trades BTC, ETH, 
 
 ## Features
 
-- **Multi-symbol trading** — BTC, ETH, SOL, XRP running in parallel threads
-- **Two strategies** configurable per symbol:
+- **Multi-symbol trading** — BTC, ETH, SOL, XRP, HYPE, ADA, BNB and more, running in parallel threads
+- **Three strategies** configurable per symbol (hot-swappable without restart):
   - `trend` — RSI + EMA Crossover with 5m/15m multi-timeframe filter
   - `scalp` — Bollinger Bands + RSI(7) + Volume confirmation
-- **Fixed fractional risk sizing** — position size based on % account risk / SL %
+  - `sniper` — Fibonacci retracement entries (Fib 0.882) with partial TP cascade and Break Even stop
+- **Fixed fractional risk sizing** — position size based on % account risk / SL distance
 - **Learning phase** — margin capped at 25 USDT for the first 10 trades
-- **Live web dashboard** — balance, open positions, PnL charts, trade history
+- **Live web dashboard** — balance, unrealized PnL, open positions, PnL charts, trade history
+- **Active Trades panel** — dedicated live view with real-time uPnL, partial profits taken, and manual close button
+- **Trade History with pagination** — closed trades with 10 per page, Prev/Next navigation
+- **Strategy badges** — colored TREND / SCALP / SNIPER labels per trade
+- **Live position sync** — qty and unrealized PnL synced from the exchange every 10 seconds
 - **Manual close buttons** — close any open position directly from the dashboard
 - **Auto-sync** — detects TP/SL closures and updates the local database automatically
+- **Strategy hot-swap** — change strategy per symbol from the dashboard without restarting the agent
 
 ---
 
@@ -54,7 +60,7 @@ BITUNIX_SECRET_KEY=your_secret_key_here
 6. Copy **API Key** and **Secret Key** into your `.env` file
 7. **Never share your Secret Key** — it is shown only once
 
-> **Note:** Make sure futures trading is enabled on your account before running the bot.
+> **Note:** Make sure futures trading is enabled on your account before running the agent.
 
 ### 3. Initialise the database
 
@@ -62,7 +68,7 @@ BITUNIX_SECRET_KEY=your_secret_key_here
 python init_db.py
 ```
 
-### 4. Start the bot
+### 4. Start the agent
 
 ```bash
 python main.py
@@ -116,6 +122,17 @@ Mean-reversion on the **5m chart**:
 - **Long**: Price at lower BB + RSI(7) < 32 + RSI turning up + volume spike
 - **Short**: Price at upper BB + RSI(7) > 68 + RSI turning down + volume spike
 
+### Sniper (Fibonacci Retracement)
+
+Precision entries at key Fibonacci levels with a partial TP cascade:
+
+- **Entry**: Price at Fib 0.882 (deep retracement into prior swing)
+- **Structural SL**: Below swing low (long) / above swing high (short)
+- **TP1** (Fib 0.786) → close 20% of position
+- **TP2** (Fib 0.650) → close 50% of position
+- **TP3** (Fib 0.500) → close 25% of position
+- **Break Even stop**: After TP1, SL is automatically moved to entry price on the exchange — remaining 5% runs protected
+
 ---
 
 ## Project Structure
@@ -127,11 +144,13 @@ hexis-trading-bot/
 ├── exchange.py          # Bitunix API connector (double SHA-256 auth)
 ├── strategy.py          # Trend strategy (RSI + EMA Crossover)
 ├── strategy_scalp.py    # Scalp strategy (Bollinger Bands)
+├── strategy_sniper.py   # Sniper strategy (Fibonacci retracement)
+├── strategy_state.py    # Per-symbol strategy state (hot-swap support)
 ├── indicators.py        # EMA, RSI, Bollinger Bands calculations
 ├── risk_manager.py      # Position sizing, TP/SL calculation
-├── trader.py            # Order execution, position management
-├── database.py          # SQLite trade history
-├── web_dashboard.py     # Flask dashboard API
+├── trader.py            # Order execution, position management, SNIPER TP monitor
+├── database.py          # SQLite trade history with live PnL tracking
+├── web_dashboard.py     # Flask dashboard API + exchange sync
 ├── init_db.py           # Database initialisation script
 ├── templates/
 │   └── dashboard.html   # Dashboard frontend
@@ -151,4 +170,4 @@ hexis-trading-bot/
 
 ## Disclaimer
 
-This bot trades real money on live markets. Use at your own risk. Past performance does not guarantee future results. Always start with small position sizes and monitor the bot closely.
+This agent trades real money on live markets. Use at your own risk. Past performance does not guarantee future results. Always start with small position sizes and monitor the agent closely.

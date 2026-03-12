@@ -202,21 +202,43 @@ class BitunixClient:
         data = self._post("/api/v1/futures/trade/place_order", body=body)
         return data["data"]
 
-    def set_position_sl(self, symbol: str, sl_price: str, side: str = None) -> dict:
+    def modify_position_sl(self, symbol: str, position_id: str, sl_price: str) -> dict:
         """
-        Update the stop-loss price on an open position.
+        Modify the stop-loss of an existing position via the correct TPSL endpoint.
         Used to move SL to Break Even after TP1 is hit.
-        side: 'BUY' (long position) or 'SELL' (short position)
+        Requires the positionId from get_open_positions().
         """
         body = {
             "symbol": symbol,
+            "positionId": position_id,
             "slPrice": sl_price,
             "slStopType": "MARK_PRICE",
-            "slOrderType": "MARKET",
         }
-        if side:
-            body["side"] = side
-        data = self._post("/api/v1/futures/trade/set_tpsl", body=body)
+        data = self._post("/api/v1/futures/tpsl/position/modify_order", body=body)
+        return data.get("data", {})
+
+    def place_position_tpsl(self, symbol: str, position_id: str,
+                             sl_price: str = None, tp_price: str = None,
+                             sl_qty: str = None, tp_qty: str = None) -> dict:
+        """
+        Place a new TP/SL order for an existing position.
+        Used when no TP/SL was set at entry, or to add a BE stop after TP1.
+        """
+        body: dict = {
+            "symbol": symbol,
+            "positionId": position_id,
+        }
+        if tp_price:
+            body["tpPrice"] = tp_price
+            body["tpStopType"] = "MARK_PRICE"
+            if tp_qty:
+                body["tpQty"] = tp_qty
+        if sl_price:
+            body["slPrice"] = sl_price
+            body["slStopType"] = "MARK_PRICE"
+            if sl_qty:
+                body["slQty"] = sl_qty
+        data = self._post("/api/v1/futures/tpsl/place_order", body=body)
         return data.get("data", {})
 
     def get_order_history(self, symbol: str, limit: int = 20) -> list[dict]:
