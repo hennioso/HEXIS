@@ -43,20 +43,31 @@ def _sync_open_trades():
     # Alle offenen Exchange-Positionen einmalig abrufen
     try:
         all_positions = _client.get_open_positions()
-        open_qtys = {p.get("symbol"): float(p.get("qty", 0)) for p in all_positions}
+        pos_by_symbol = {p.get("symbol"): p for p in all_positions if float(p.get("qty", 0)) > 0}
     except Exception:
         return
 
     for trade in open_trades:
         symbol = trade["symbol"]
-        exchange_qty = open_qtys.get(symbol, 0)
+        pos = pos_by_symbol.get(symbol)
+        exchange_qty = float(pos.get("qty", 0)) if pos else 0
 
         # Position auf Exchange noch offen?
         if exchange_qty > 0:
-            # Sync qty if it changed (e.g. manual position increase)
+            # Sync qty if it changed (e.g. partial TP or manual adjustment)
             db_qty = float(trade.get("qty", 0))
             if abs(exchange_qty - db_qty) > 0.0001:
                 db.update_trade_qty(trade["trade_id"], exchange_qty)
+
+            # Sync unrealized PnL from exchange position
+            unrealized = 0.0
+            for field in ("unrealizedPNL", "unRealizedPNL", "pnl", "unrealisedPnl"):
+                val = pos.get(field)
+                if val is not None:
+                    unrealized = float(val)
+                    if unrealized != 0:
+                        break
+            db.update_unrealized_pnl(trade["trade_id"], unrealized)
             continue  # noch offen, nichts tun
 
         # Nicht mehr auf Exchange → schließen
