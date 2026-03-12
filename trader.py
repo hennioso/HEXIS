@@ -411,7 +411,7 @@ class Trader:
         else:
             price_prec = 5
 
-        # --- TP1: 20% close + move SL to Break Even ---
+        # --- TP1: 20% close ---
         if not tp1_hit and _tp_reached(tp1_price):
             qty_tp1 = round(qty_total * 0.20, self.rm.qty_precision)
             if qty_tp1 >= self.rm.min_qty:
@@ -425,8 +425,9 @@ class Trader:
                         reduce_only=True,
                     )
                     db.mark_sniper_tp(trade_id, 1)
-                    pnl_tp1 = qty_tp1 * abs(price - entry_price) * (1 if direction == "long" else 1)
+                    pnl_tp1 = qty_tp1 * abs(price - entry_price)
                     db.add_partial_pnl(trade_id, round(pnl_tp1, 4))
+                    tp1_hit = True  # update local state so BE move runs this tick
                     logger.info(
                         f"SNIPER TP1 | {self.symbol} | Closed 20% ({qty_tp1}) @ {price:.4f}"
                     )
@@ -434,18 +435,20 @@ class Trader:
                     logger.error(f"SNIPER TP1 close failed: {e}")
                     return
 
-            # Move SL to Break Even
-            if not be_moved:
-                be_sl = str(round(entry_price, price_prec))
-                pos_side = "BUY" if direction == "long" else "SELL"
-                try:
-                    self.client.set_position_sl(self.symbol, be_sl, side=pos_side)
-                    db.mark_sniper_be_moved(trade_id, entry_price)
-                    logger.info(
-                        f"SNIPER SL → BE | {self.symbol} | SL moved to {be_sl}"
-                    )
-                except Exception as e:
-                    logger.warning(f"SNIPER BE move failed (non-critical): {e}")
+        # --- Move SL to Break Even (runs independently — retried every tick until successful) ---
+        if tp1_hit and not be_moved:
+            be_sl = str(round(entry_price, price_prec))
+            # side = closing order direction (SELL closes a long, BUY closes a short)
+            close_pos_side = "SELL" if direction == "long" else "BUY"
+            try:
+                self.client.set_position_sl(self.symbol, be_sl, side=close_pos_side)
+                db.mark_sniper_be_moved(trade_id, entry_price)
+                be_moved = True
+                logger.info(
+                    f"SNIPER SL → BE | {self.symbol} | SL moved to {be_sl}"
+                )
+            except Exception as e:
+                logger.error(f"SNIPER BE move failed: {e}")
 
         # --- TP2: 50% close ---
         elif tp1_hit and not tp2_hit and _tp_reached(tp2_price):
