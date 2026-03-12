@@ -62,5 +62,11 @@ FIB_STOP_LOSS_PCT   = float(os.getenv("FIB_STOP_LOSS_PCT",  "0.015"))           
 FIB_TAKE_PROFIT_PCT = float(os.getenv("FIB_TAKE_PROFIT_PCT", "0.030"))          # 3.0% TP (2:1 R:R)
 # Deep levels (0.882): SL is placed structurally at swing low/high ± 0.2%
 
+# ---- LSOB Strategy Parameters (Liquidity Sweep Orderblock) ----------------
+LSOB_TF          = os.getenv("LSOB_TF", "15m")
+LSOB_KLINE_LIMIT = int(os.getenv("LSOB_KLINE_LIMIT", "120"))
+LSOB_LOOKBACK    = int(os.getenv("LSOB_LOOKBACK", "40"))   # candles to define prior swing
+LSOB_SCAN_DEPTH  = int(os.getenv("LSOB_SCAN_DEPTH", "25")) # how far back to scan for sweep
+
 # ---- Bot Behaviour ---------------------------------------------------------
 LOOP_INTERVAL_SECONDS = 15  # How often the bot checks prices (seconds)
