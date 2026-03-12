@@ -418,6 +418,21 @@
     .strat-btn.active-scalp  { background: rgba(63,185,80,0.15);   color: var(--green);  border-color: var(--green); }
     .strat-btn.active-sniper { background: rgba(188,140,255,0.15); color: var(--purple); border-color: var(--purple); }
 
+    /* ---- Day Filter Buttons ---- */
+    .day-btn {
+      padding: 3px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .day-btn:hover { border-color: #555; color: var(--text); }
+    .day-btn.active { background: rgba(88,166,255,0.15); color: var(--blue); border-color: var(--blue); }
+
     /* ---- Empty State ---- */
     .empty {
       text-align: center;
@@ -556,6 +571,19 @@
     <div class="bal-item">
       <span class="bal-label">Total (Est.)</span>
       <span class="bal-value blue" id="b-total">—</span>
+    </div>
+  </div>
+
+  <!-- Stats period filter -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 24px 4px">
+    <span style="font-size:13px;font-weight:600;color:var(--muted)">Performance</span>
+    <div id="day-filters" style="display:flex;gap:6px">
+      <button class="day-btn active" onclick="setDayFilter(1,this)">1D</button>
+      <button class="day-btn" onclick="setDayFilter(5,this)">5D</button>
+      <button class="day-btn" onclick="setDayFilter(7,this)">7D</button>
+      <button class="day-btn" onclick="setDayFilter(14,this)">14D</button>
+      <button class="day-btn" onclick="setDayFilter(30,this)">30D</button>
+      <button class="day-btn" onclick="setDayFilter(0,this)">All</button>
     </div>
   </div>
 
@@ -702,29 +730,65 @@
   }
 
   async function loadStats() {
+    // Triggers _sync_open_trades() on the server; we only need open_trades count from here.
     const r = await fetch('/api/stats');
     const s = await r.json();
+    document.getElementById('s-open').textContent = s.open_trades ?? '—';
+  }
 
-    const pnl = parseFloat(s.total_pnl || 0);
-    _totalPnl = pnl;
-    updateRoi();
+  function renderStats() {
+    // Filter closed trades by the selected period
+    let filtered = _closedTrades;
+    if (_historyDays > 0) {
+      const cutoff = Date.now() - _historyDays * 86400_000;
+      filtered = _closedTrades.filter(t => {
+        const ts = t.exit_time || t.entry_time;
+        if (!ts) return false;
+        return new Date(ts + (ts.endsWith('Z') ? '' : 'Z')).getTime() >= cutoff;
+      });
+    }
+
+    const total    = filtered.length;
+    const pnls     = filtered.map(t => parseFloat(t.pnl_usdt || 0));
+    const wins     = pnls.filter(p => p > 0);
+    const losses   = pnls.filter(p => p <= 0);
+    const totalPnl = pnls.reduce((a, b) => a + b, 0);
+    const winRate  = total > 0 ? (wins.length / total * 100) : 0;
+    const avgWin   = wins.length   > 0 ? wins.reduce((a,b) => a+b,0)   / wins.length   : 0;
+    const avgLoss  = losses.length > 0 ? losses.reduce((a,b) => a+b,0) / losses.length : 0;
+    const best     = total > 0 ? Math.max(...pnls) : 0;
+    const worst    = total > 0 ? Math.min(...pnls) : 0;
+    const longCnt  = filtered.filter(t => t.direction === 'long').length;
+    const shortCnt = total - longCnt;
+
+    // Total PnL
     document.getElementById('s-pnl').innerHTML =
-      `<span class="${pnl >= 0 ? 'green' : 'red'}">${pnl >= 0 ? '+' : ''}${fmt(pnl)} $</span>`;
-    document.getElementById('s-winrate').innerHTML =
-      `<span class="${s.win_rate >= 50 ? 'green' : 'red'}">${fmt(s.win_rate, 1)}%</span>`;
-    document.getElementById('s-total').textContent = s.total_trades;
-    document.getElementById('s-open').textContent = s.open_trades;
-    document.getElementById('s-avgwin').textContent = `+${fmt(s.avg_win)} $`;
-    document.getElementById('s-avgloss').textContent = `${fmt(s.avg_loss)} $`;
-    document.getElementById('s-best').textContent = `+${fmt(s.best_trade)} $`;
-    document.getElementById('s-worst').textContent = `${fmt(s.worst_trade)} $`;
-    document.getElementById('s-longs').textContent = `${s.long_trades} Long Trades`;
-    document.getElementById('s-shorts').textContent = `${s.short_trades} Short Trades`;
+      `<span class="${totalPnl >= 0 ? 'green' : 'red'}">${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)} $</span>`;
 
-    // Donut Chart
-    const wins = Math.round((s.win_rate / 100) * s.total_trades);
-    const losses = s.total_trades - wins;
-    renderDonut(wins, losses, s.open_trades);
+    // Win Rate
+    document.getElementById('s-winrate').innerHTML = total > 0
+      ? `<span class="${winRate >= 50 ? 'green' : 'red'}">${winRate.toFixed(1)}%</span>`
+      : '—';
+
+    // Total Trades
+    document.getElementById('s-total').textContent = total;
+
+    // Avg Win / Loss
+    document.getElementById('s-avgwin').innerHTML  = wins.length   > 0 ? `<span class="green">+${avgWin.toFixed(2)} $</span>`  : '—';
+    document.getElementById('s-avgloss').innerHTML = losses.length > 0 ? `<span class="red">${avgLoss.toFixed(2)} $</span>`    : '—';
+    document.getElementById('s-longs').textContent  = `${longCnt} Long`;
+    document.getElementById('s-shorts').textContent = `${shortCnt} Short`;
+
+    // Best / Worst
+    document.getElementById('s-best').innerHTML  = total > 0 ? `<span class="green">+${best.toFixed(2)} $</span>`                            : '—';
+    document.getElementById('s-worst').innerHTML = total > 0 ? `<span class="${worst < 0 ? 'red' : 'green'}">${worst.toFixed(2)} $</span>`   : '—';
+
+    // ROI
+    _totalPnl = totalPnl;
+    updateRoi();
+
+    // Donut chart
+    renderDonut(wins.length, losses.length, parseInt(document.getElementById('s-open').textContent) || 0);
   }
 
   // ---------- Manual Close ----------
@@ -841,6 +905,16 @@
   let _historyPage = 0;
   const _PAGE_SIZE  = 10;
   let _closedTrades = [];
+  let _historyDays  = 1;  // default: show last 1 day
+
+  function setDayFilter(days, btn) {
+    _historyDays = days;
+    _historyPage = 0;
+    document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderStats();
+    renderHistoryPage();
+  }
 
   function strategyLabel(t) {
     const s = (t.strategy || '').toLowerCase();
@@ -884,7 +958,19 @@
 
   function renderHistoryPage() {
     const tbody  = document.getElementById('trades-tbody');
-    const total  = _closedTrades.length;
+
+    // Apply day filter
+    let filtered = _closedTrades;
+    if (_historyDays > 0) {
+      const cutoff = Date.now() - _historyDays * 86400_000;
+      filtered = _closedTrades.filter(t => {
+        const ts = t.exit_time || t.entry_time;
+        if (!ts) return false;
+        return new Date(ts + (ts.endsWith('Z') ? '' : 'Z')).getTime() >= cutoff;
+      });
+    }
+
+    const total  = filtered.length;
     const pages  = Math.max(1, Math.ceil(total / _PAGE_SIZE));
     _historyPage = Math.max(0, Math.min(_historyPage, pages - 1));
 
@@ -894,11 +980,11 @@
     document.getElementById('page-next').disabled = _historyPage >= pages - 1;
 
     if (total === 0) {
-      tbody.innerHTML = `<tr><td colspan="13"><div class="empty"><div class="icon">📊</div>No closed trades yet.</div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="13"><div class="empty"><div class="icon">📊</div>No trades in this period.</div></td></tr>`;
       return;
     }
 
-    const slice = _closedTrades.slice(_historyPage * _PAGE_SIZE, (_historyPage + 1) * _PAGE_SIZE);
+    const slice  = filtered.slice(_historyPage * _PAGE_SIZE, (_historyPage + 1) * _PAGE_SIZE);
     const offset = total - _historyPage * _PAGE_SIZE;
     tbody.innerHTML = slice.map((t, i) => `
       <tr>
@@ -953,6 +1039,7 @@
     renderActiveTrades(trades.filter(t => t.status === 'open'));
     _closedTrades = trades.filter(t => t.status !== 'open');
     renderHistoryPage();
+    renderStats();
   }
 
   async function loadPnlChart() {
