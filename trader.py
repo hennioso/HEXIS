@@ -435,16 +435,35 @@ class Trader:
                     logger.error(f"SNIPER TP1 close failed: {e}")
                     return
 
-        # --- Break Even: software stop (exchange set_tpsl not reliable in HEDGE mode) ---
-        # Once TP1 is hit, the bot monitors the price and closes the position
-        # if it retraces back to the entry price (break even).
+        # --- Break Even: move exchange SL to entry after TP1 ---
         if tp1_hit and not be_moved:
-            # Mark BE as "moved" immediately — protection is now software-managed
+            be_price_str = str(round(entry_price, price_prec))
+            exchange_moved = False
+            try:
+                pos = self.refresh_position()
+                if pos:
+                    position_id = str(pos.get("positionId", ""))
+                    if position_id:
+                        self.client.modify_position_sl(
+                            symbol=self.symbol,
+                            position_id=position_id,
+                            sl_price=be_price_str,
+                        )
+                        exchange_moved = True
+                        logger.info(
+                            f"SNIPER BE moved on exchange | {self.symbol} | "
+                            f"SL → {be_price_str} (positionId: {position_id})"
+                        )
+            except Exception as e:
+                logger.warning(f"SNIPER BE exchange move failed: {e} — falling back to software stop")
+
+            if not exchange_moved:
+                logger.info(
+                    f"SNIPER BE armed (software) | {self.symbol} | Stop at {be_price_str}"
+                )
+
             db.mark_sniper_be_moved(trade_id, entry_price)
             be_moved = True
-            logger.info(
-                f"SNIPER BE armed | {self.symbol} | Software stop at {round(entry_price, price_prec)}"
-            )
 
         # --- Enforce software BE stop: close if price retraces to entry ---
         if tp1_hit and be_moved:
