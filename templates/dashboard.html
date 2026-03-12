@@ -435,6 +435,73 @@
     .day-btn:hover { border-color: #555; color: var(--text); }
     .day-btn.active { background: rgba(88,166,255,0.15); color: var(--blue); border-color: var(--blue); }
 
+    /* ---- Trade Detail Modal ---- */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.65);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.18s;
+    }
+    .modal-overlay.show { opacity: 1; pointer-events: all; }
+    .modal {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 440px; max-width: 95vw; max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.55);
+      transform: translateY(12px);
+      transition: transform 0.18s;
+    }
+    .modal-overlay.show .modal { transform: translateY(0); }
+    .modal-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 16px 20px 12px;
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; background: var(--card); z-index: 1;
+    }
+    .modal-header-title { flex: 1; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .modal-close { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; padding: 0; line-height: 1; }
+    .modal-close:hover { color: var(--text); }
+    .modal-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+    .modal-section-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+      color: var(--muted); text-transform: uppercase; margin-bottom: 8px;
+    }
+    .modal-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 5px 0; border-bottom: 1px solid rgba(48,54,61,0.5);
+    }
+    .modal-row:last-child { border-bottom: none; }
+    .modal-row-label { font-size: 12px; color: var(--muted); }
+    .modal-row-value { font-size: 13px; font-weight: 600; }
+    .tp-level {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 10px; border-radius: 6px;
+      background: rgba(48,54,61,0.4); margin-bottom: 4px;
+    }
+    .tp-level.tp-hit { opacity: 0.45; }
+    .tp-level:last-child { margin-bottom: 0; }
+    .tp-icon { font-size: 14px; width: 18px; text-align: center; }
+    .tp-info { flex: 1; line-height: 1.4; }
+    .tp-label { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.05em; }
+    .tp-pct  { font-size: 10px; color: var(--muted); }
+    .tp-price { font-size: 13px; font-weight: 700; }
+    .tp-dist { font-size: 11px; text-align: right; min-width: 100px; }
+    .sl-level {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 10px; border-radius: 6px;
+      background: rgba(248,81,73,0.07); margin-top: 4px;
+    }
+    .be-badge {
+      font-size: 9px; font-weight: 700;
+      background: rgba(210,153,34,0.2); color: var(--yellow);
+      border-radius: 3px; padding: 1px 5px; margin-left: 4px; vertical-align: middle;
+    }
+    tr.clickable-row { cursor: pointer; }
+    tr.clickable-row:hover td { background: rgba(88,166,255,0.04); }
+
     /* ---- Empty State ---- */
     .empty {
       text-align: center;
@@ -694,6 +761,17 @@
 
 </main>
 
+<!-- Trade Detail Modal -->
+<div class="modal-overlay" id="trade-modal" onclick="if(event.target===this)closeTradeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-header-title" id="modal-title"></div>
+      <button class="modal-close" onclick="closeTradeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
 <script>
   let pnlChart = null;
   let donutChart = null;
@@ -944,6 +1022,11 @@
   function renderActiveTrades(open) {
     const tbody = document.getElementById('active-tbody');
     document.getElementById('active-count').textContent = `${open.length} Open`;
+
+    // Rebuild lookup map for modal
+    _openTradesMap = {};
+    open.forEach(t => { _openTradesMap[t.trade_id] = t; });
+
     if (open.length === 0) {
       tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:20px">No open positions</td></tr>`;
       return;
@@ -953,7 +1036,7 @@
       const partial = t.partial_pnl_usdt
           ? `<br><span style="font-size:10px;color:var(--muted)">+${parseFloat(t.partial_pnl_usdt).toFixed(2)} taken</span>`
           : '';
-      return `<tr id="trade-row-${t.trade_id}">
+      return `<tr class="clickable-row" id="trade-row-${t.trade_id}" onclick="openTradeModal('${t.trade_id}')">
         <td style="color:var(--muted);font-size:12px">${fmtDate(t.entry_time)}</td>
         <td><span class="sym-badge sym-${t.symbol.replace('USDT','')}">${t.symbol.replace('USDT','')}</span></td>
         <td><span class="dir-badge dir-${t.direction}">${t.direction}</span></td>
@@ -962,7 +1045,7 @@
         <td style="color:var(--green);font-size:12px">${t.tp_price ? fmtPrice(t.tp_price) : '—'}</td>
         <td style="color:var(--red);font-size:12px">${t.sl_price ? fmtPrice(t.sl_price) : '—'}</td>
         <td><span style="font-size:11px;color:var(--muted)">uPnL </span>${upnl}${partial}</td>
-        <td><button class="close-btn" onclick="closePosition('${t.symbol}','${t.trade_id}',this)">Close</button></td>
+        <td><button class="close-btn" onclick="event.stopPropagation();closePosition('${t.symbol}','${t.trade_id}',this)">Close</button></td>
       </tr>`;
     }).join('');
   }
@@ -1262,6 +1345,195 @@
       btn.textContent = '✗ Error';
       setTimeout(() => { btn.textContent = '⟳ Sync Trades'; btn.disabled = false; }, 2000);
     }
+  }
+
+  // ---- Trade Detail Modal ----
+  let _openTradesMap = {};
+
+  function openTradeModal(tradeId) {
+    const t = _openTradesMap[tradeId];
+    if (!t) return;
+
+    const sym      = t.symbol.replace('USDT', '');
+    const dir      = t.direction.toUpperCase();
+    const strategy = (t.strategy || 'trend').toUpperCase();
+
+    // Read live price from the already-rendered symbol card
+    const priceEl = document.getElementById(`sym-price-${t.symbol}`);
+    let livePrice = 0;
+    if (priceEl) {
+      const raw = priceEl.textContent.replace(/[$,]/g, '');
+      livePrice = parseFloat(raw) || 0;
+    }
+
+    const entry   = parseFloat(t.entry_price);
+    const dirMult = dir === 'LONG' ? 1 : -1;
+    const priceDelta = livePrice ? (livePrice - entry) / entry * 100 * dirMult : null;
+
+    // Header
+    const headerHTML = `
+      <span class="sym-badge sym-${sym}">${sym}</span>
+      <span class="dir-badge dir-${t.direction}">${dir}</span>
+      <span class="strat-badge strat-${strategy.toLowerCase()}">${strategy}</span>`;
+    document.getElementById('modal-title').innerHTML = headerHTML;
+
+    // Remaining qty
+    let qtyTotal     = parseFloat(t.qty);
+    let qtyRemaining = qtyTotal;
+    if (t.tp1_hit) qtyRemaining -= qtyTotal * 0.20;
+    if (t.tp2_hit) qtyRemaining -= qtyTotal * 0.50;
+    if (t.tp3_hit) qtyRemaining -= qtyTotal * 0.25;
+    qtyRemaining = Math.max(Math.round(qtyRemaining * 10000) / 10000, 0);
+
+    let html = '';
+
+    // --- Price section ---
+    const livePriceStr = livePrice ? fmtPrice(livePrice) : '—';
+    const deltaCol     = priceDelta !== null ? (priceDelta >= 0 ? 'var(--green)' : 'var(--red)') : '';
+    const deltaStr     = priceDelta !== null
+      ? `<span style="font-size:11px;font-weight:400;color:${deltaCol}">${priceDelta >= 0 ? '+' : ''}${priceDelta.toFixed(2)}%</span>`
+      : '';
+    html += `<div class="modal-section">
+      <div class="modal-section-label">Price</div>
+      <div class="modal-row">
+        <span class="modal-row-label">Entry</span>
+        <span class="modal-row-value">${fmtPrice(entry)}</span>
+      </div>
+      <div class="modal-row">
+        <span class="modal-row-label">Live Price</span>
+        <span class="modal-row-value">${livePriceStr} ${deltaStr}</span>
+      </div>
+    </div>`;
+
+    // --- Position section ---
+    const entryDate = t.entry_time
+      ? new Date(t.entry_time.endsWith('Z') ? t.entry_time : t.entry_time + 'Z')
+      : null;
+    const ageStr = entryDate ? _timeAgo(entryDate) : '—';
+    html += `<div class="modal-section">
+      <div class="modal-section-label">Position</div>
+      <div class="modal-row">
+        <span class="modal-row-label">Total Qty</span>
+        <span class="modal-row-value">${fmt(qtyTotal, 4)}</span>
+      </div>
+      <div class="modal-row">
+        <span class="modal-row-label">Remaining Qty</span>
+        <span class="modal-row-value">${fmt(qtyRemaining, 4)}</span>
+      </div>
+      <div class="modal-row">
+        <span class="modal-row-label">Open for</span>
+        <span class="modal-row-value" style="color:var(--muted)">${ageStr}</span>
+      </div>
+    </div>`;
+
+    // --- Levels section ---
+    html += `<div class="modal-section"><div class="modal-section-label">Levels</div>`;
+
+    if (t.strategy === 'sniper' && t.tp1_price) {
+      const tps = [
+        { label: 'TP1', pct: '20%', price: parseFloat(t.tp1_price), hit: !!t.tp1_hit },
+        { label: 'TP2', pct: '50%', price: parseFloat(t.tp2_price), hit: !!t.tp2_hit },
+        { label: 'TP3', pct: '25%', price: parseFloat(t.tp3_price), hit: !!t.tp3_hit },
+      ];
+      tps.forEach(tp => {
+        let distStr = '';
+        if (livePrice && !tp.hit) {
+          const dist    = (tp.price - livePrice) * dirMult;
+          const distPct = dist / livePrice * 100;
+          const col     = dist > 0 ? 'var(--green)' : 'var(--red)';
+          distStr = `<span style="color:${col}">${dist > 0 ? '' : ''}${dist.toFixed(4)}<br>(${distPct.toFixed(2)}%)</span>`;
+        } else if (tp.hit) {
+          distStr = `<span style="color:var(--green)">Done</span>`;
+        }
+        html += `<div class="tp-level${tp.hit ? ' tp-hit' : ''}">
+          <span class="tp-icon">${tp.hit ? '✅' : '⏳'}</span>
+          <div class="tp-info">
+            <span class="tp-label">${tp.label}</span>
+            <span class="tp-pct"> · ${tp.pct}</span><br>
+            <span class="tp-price">${fmtPrice(tp.price)}</span>
+          </div>
+          <div class="tp-dist">${distStr}</div>
+        </div>`;
+      });
+    } else if (t.tp_price) {
+      const tpPrice = parseFloat(t.tp_price);
+      let distStr = '';
+      if (livePrice) {
+        const dist    = (tpPrice - livePrice) * dirMult;
+        const distPct = dist / livePrice * 100;
+        const col     = dist > 0 ? 'var(--green)' : 'var(--red)';
+        distStr = `<span style="color:${col}">${dist.toFixed(4)}<br>(${distPct.toFixed(2)}%)</span>`;
+      }
+      html += `<div class="tp-level">
+        <span class="tp-icon">🎯</span>
+        <div class="tp-info">
+          <span class="tp-label">TP</span><br>
+          <span class="tp-price">${fmtPrice(tpPrice)}</span>
+        </div>
+        <div class="tp-dist">${distStr}</div>
+      </div>`;
+    }
+
+    if (t.sl_price) {
+      const slPrice = parseFloat(t.sl_price);
+      let slDistStr = '';
+      if (livePrice) {
+        const dist    = (slPrice - livePrice) * dirMult;
+        const distPct = Math.abs(dist / livePrice * 100);
+        slDistStr = `<span style="color:var(--red)">${dist.toFixed(4)}<br>(${distPct.toFixed(2)}%)</span>`;
+      }
+      const beLabel = t.be_moved ? '<span class="be-badge">BE</span>' : '';
+      html += `<div class="sl-level">
+        <span class="tp-icon">🛡</span>
+        <div class="tp-info">
+          <span class="tp-label">SL</span>${beLabel}<br>
+          <span class="tp-price" style="color:var(--red)">${fmtPrice(slPrice)}</span>
+        </div>
+        <div class="tp-dist">${slDistStr}</div>
+      </div>`;
+    }
+
+    html += `</div>`;
+
+    // --- PnL section ---
+    const upnl       = t.unrealized_pnl != null ? parseFloat(t.unrealized_pnl) : null;
+    const partialPnl = t.partial_pnl_usdt ? parseFloat(t.partial_pnl_usdt) : 0;
+    const totalEst   = upnl !== null ? upnl + partialPnl : null;
+    html += `<div class="modal-section">
+      <div class="modal-section-label">PnL</div>
+      <div class="modal-row">
+        <span class="modal-row-label">Unrealized (open)</span>
+        <span class="modal-row-value">${upnl !== null ? fmtPnl(upnl) : '—'}</span>
+      </div>
+      <div class="modal-row">
+        <span class="modal-row-label">Partial taken</span>
+        <span class="modal-row-value" style="color:${partialPnl > 0 ? 'var(--green)' : 'var(--muted)'}">
+          ${partialPnl > 0 ? '+' : ''}${partialPnl.toFixed(2)} USDT
+        </span>
+      </div>
+      <div class="modal-row">
+        <span class="modal-row-label">Total est.</span>
+        <span class="modal-row-value">${totalEst !== null ? fmtPnl(totalEst) : '—'}</span>
+      </div>
+    </div>`;
+
+    document.getElementById('modal-body').innerHTML = html;
+    document.getElementById('trade-modal').classList.add('show');
+  }
+
+  function closeTradeModal() {
+    document.getElementById('trade-modal').classList.remove('show');
+  }
+
+  function _timeAgo(date) {
+    const diff = Date.now() - date.getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ${m % 60}m ago`;
+    const d = Math.floor(h / 24);
+    return `${d}d ${h % 24}h ago`;
   }
 
   // Initial load + auto-refresh every 30 seconds
