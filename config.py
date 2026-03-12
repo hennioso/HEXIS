@@ -33,7 +33,10 @@ RISK_PER_TRADE = float(os.getenv("RISK_PER_TRADE", "0.05"))    # 5% capital risk
 STOP_LOSS_PCT = float(os.getenv("STOP_LOSS_PCT", "0.025"))     # 2.5% stop loss
 TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "0.050")) # 5.0% take profit (2:1 R:R)
 
-# Learning phase: for the first N trades, margin is capped at MAX_MARGIN_USDT
+# Hard cap: margin per trade never exceeds this % of available balance (always active)
+MAX_MARGIN_PCT = float(os.getenv("MAX_MARGIN_PCT", "0.05"))  # 5% → max $55 margin on $1100
+
+# Learning phase: for the first N trades, margin is additionally capped at MAX_MARGIN_USDT
 MAX_MARGIN_TRADES = int(os.getenv("MAX_MARGIN_TRADES", "10"))
 MAX_MARGIN_USDT = float(os.getenv("MAX_MARGIN_USDT", "25.0"))
 
