@@ -360,6 +360,20 @@
     .dir-long  { background: rgba(63,185,80,0.15); color: var(--green); }
     .dir-short { background: rgba(248,81,73,0.15);  color: var(--red); }
 
+    /* Strategy Badge */
+    .strat-badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+    }
+    .strat-trend  { background: rgba(88,166,255,0.15);  color: var(--blue); }
+    .strat-scalp  { background: rgba(63,185,80,0.15);   color: var(--green); }
+    .strat-sniper { background: rgba(188,140,255,0.15); color: #c792ea; }
+    .strat-fib    { background: rgba(188,140,255,0.15); color: #c792ea; }
+
     /* Status Badge */
     .status-badge {
       display: inline-block;
@@ -624,7 +638,7 @@
             <th>PnL (USDT)</th>
             <th>Status</th>
             <th>RSI Entry</th>
-            <th>Trend 15m</th>
+            <th>Strategy</th>
           </tr>
         </thead>
         <tbody id="trades-tbody">
@@ -815,13 +829,18 @@
   const _PAGE_SIZE  = 10;
   let _closedTrades = [];
 
-  function trendLabel(t) {
-    return t.trend_15m === 'bull'   ? '<span style="color:var(--green)">↑ Bull</span>'
-         : t.trend_15m === 'bear'   ? '<span style="color:var(--red)">↓ Bear</span>'
-         : t.trend_15m === 'sniper' ? '<span style="color:#c792ea">🎯 Sniper</span>'
-         : t.trend_15m === 'fib'    ? '<span style="color:#c792ea">◈ Fib</span>'
-         : t.trend_15m === 'scalp'  ? '<span style="color:var(--muted)">~ Scalp</span>'
-         : '—';
+  function strategyLabel(t) {
+    const s = (t.strategy || '').toLowerCase();
+    const m = (t.trend_15m || '').toLowerCase();
+    if (s === 'sniper' || m === 'sniper')
+      return '<span class="strat-badge strat-sniper">SNIPER</span>';
+    if (m === 'scalp')
+      return '<span class="strat-badge strat-scalp">SCALP</span>';
+    if (m === 'bull' || m === 'bear')
+      return '<span class="strat-badge strat-trend">TREND</span>';
+    if (m === 'fib')
+      return '<span class="strat-badge strat-fib">FIB</span>';
+    return '—';
   }
 
   function renderActiveTrades(open) {
@@ -882,7 +901,7 @@
         <td>${fmtPnl(t.pnl_usdt)}</td>
         <td>${statusBadge(t.status)}</td>
         <td style="color:var(--muted)">${t.rsi_entry ? fmt(t.rsi_entry, 1) : '—'}</td>
-        <td>${trendLabel(t)}</td>
+        <td>${strategyLabel(t)}</td>
       </tr>
     `).join('');
   }
