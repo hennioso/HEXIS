@@ -171,6 +171,7 @@ def main():
         leverage=config.LEVERAGE,
         max_margin_usdt=config.MAX_MARGIN_USDT,
         max_margin_trades=config.MAX_MARGIN_TRADES,
+        max_margin_pct=config.MAX_MARGIN_PCT,
     )
     risk_manager_scalp = RiskManager(
         risk_per_trade=config.RISK_PER_TRADE,
@@ -179,6 +180,7 @@ def main():
         leverage=config.LEVERAGE,
         max_margin_usdt=config.MAX_MARGIN_USDT,
         max_margin_trades=config.MAX_MARGIN_TRADES,
+        max_margin_pct=config.MAX_MARGIN_PCT,
     )
 
     # Connection test
@@ -203,6 +205,7 @@ def main():
         leverage=config.LEVERAGE,
         max_margin_usdt=config.MAX_MARGIN_USDT,
         max_margin_trades=config.MAX_MARGIN_TRADES,
+        max_margin_pct=config.MAX_MARGIN_PCT,
     )
 
     for symbol, strategy in zip(config.SYMBOLS, config.STRATEGIES):

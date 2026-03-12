@@ -240,6 +240,14 @@ class Trader:
             return None
         qty = round(risk_usdt / sl_dist, self.rm.qty_precision)
 
+        # Hard margin cap: never use more than max_margin_pct of balance per trade
+        max_qty_margin = round(
+            (balance * self.rm.max_margin_pct * self.rm.leverage) / entry_price,
+            self.rm.qty_precision,
+        )
+        if qty > max_qty_margin:
+            qty = max_qty_margin
+
         # Margin cap for learning phase
         if (
             self.rm.max_margin_usdt is not None

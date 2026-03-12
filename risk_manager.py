@@ -27,6 +27,7 @@ class RiskManager:
         price_precision: int = 1,
         max_margin_usdt: float = None,   # Margin cap in USDT (None = no limit)
         max_margin_trades: int = 0,      # Number of trades the cap applies to
+        max_margin_pct: float = 0.05,    # Hard cap: margin never exceeds this % of balance
     ):
         self.risk_per_trade = risk_per_trade
         self.stop_loss_pct = stop_loss_pct
@@ -37,6 +38,7 @@ class RiskManager:
         self.price_precision = price_precision
         self.max_margin_usdt = max_margin_usdt
         self.max_margin_trades = max_margin_trades
+        self.max_margin_pct = max_margin_pct
 
     def calculate(
         self,
@@ -79,6 +81,15 @@ class RiskManager:
 
         # Notional value (without leverage)
         notional = qty * entry_price
+
+        # Hard cap: margin (notional / leverage) must not exceed max_margin_pct of balance
+        max_margin_from_pct = available_balance * self.max_margin_pct
+        max_notional_from_pct = max_margin_from_pct * self.leverage
+        if notional > max_notional_from_pct:
+            qty = round(max_notional_from_pct / entry_price, self.qty_precision)
+            if qty < self.min_qty:
+                return None
+            notional = qty * entry_price
 
         # Safety check: notional must not exceed available_balance * leverage
         max_notional = available_balance * self.leverage
