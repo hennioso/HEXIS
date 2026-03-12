@@ -826,7 +826,11 @@
         <td>${t.exit_price ? fmtPrice(t.exit_price) : '<span style="color:var(--muted)">Open</span>'}</td>
         <td style="color:var(--green);font-size:12px">${t.tp_price ? fmtPrice(t.tp_price) : '—'}</td>
         <td style="color:var(--red);font-size:12px">${t.sl_price ? fmtPrice(t.sl_price) : '—'}</td>
-        <td>${fmtPnl(t.pnl_usdt)}</td>
+        <td>${t.status === 'open'
+            ? (t.unrealized_pnl != null
+                ? `<span style="font-size:11px;color:var(--muted)">uPnL </span>${fmtPnl(t.unrealized_pnl)}`
+                : '<span style="color:var(--muted)">—</span>')
+            : fmtPnl(t.pnl_usdt)}</td>
         <td>${statusBadge(t.status)}</td>
         <td style="color:var(--muted)">${t.rsi_entry ? fmt(t.rsi_entry, 1) : '—'}</td>
         <td>

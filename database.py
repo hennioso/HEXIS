@@ -47,7 +47,8 @@ def init_db():
         _add_column_if_missing(conn, "trades", "tp1_hit",    "INTEGER DEFAULT 0")
         _add_column_if_missing(conn, "trades", "tp2_hit",    "INTEGER DEFAULT 0")
         _add_column_if_missing(conn, "trades", "tp3_hit",    "INTEGER DEFAULT 0")
-        _add_column_if_missing(conn, "trades", "be_moved",   "INTEGER DEFAULT 0")
+        _add_column_if_missing(conn, "trades", "be_moved",      "INTEGER DEFAULT 0")
+        _add_column_if_missing(conn, "trades", "unrealized_pnl", "REAL")
         conn.commit()
 
 
@@ -131,7 +132,7 @@ def close_trade(trade_id: str, exit_price: float, status: str = "closed"):
 
         conn.execute(
             """UPDATE trades
-               SET exit_price=?, exit_time=?, pnl_usdt=?, status=?
+               SET exit_price=?, exit_time=?, pnl_usdt=?, status=?, unrealized_pnl=NULL
                WHERE trade_id=?""",
             (
                 exit_price,
@@ -215,6 +216,16 @@ def update_trade_qty(trade_id: str, qty: float):
     """Updates the qty of an open trade (e.g. after manual position sizing on exchange)."""
     with _connect() as conn:
         conn.execute("UPDATE trades SET qty=? WHERE trade_id=?", (qty, trade_id))
+        conn.commit()
+
+
+def update_unrealized_pnl(trade_id: str, pnl: float):
+    """Updates the live unrealized PnL for an open trade."""
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE trades SET unrealized_pnl=? WHERE trade_id=?",
+            (round(pnl, 4), trade_id),
+        )
         conn.commit()
 
 
