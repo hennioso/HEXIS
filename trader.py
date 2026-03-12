@@ -435,20 +435,40 @@ class Trader:
                     logger.error(f"SNIPER TP1 close failed: {e}")
                     return
 
-        # --- Move SL to Break Even (runs independently — retried every tick until successful) ---
+        # --- Break Even: software stop (exchange set_tpsl not reliable in HEDGE mode) ---
+        # Once TP1 is hit, the bot monitors the price and closes the position
+        # if it retraces back to the entry price (break even).
         if tp1_hit and not be_moved:
-            be_sl = str(round(entry_price, price_prec))
-            # side = closing order direction (SELL closes a long, BUY closes a short)
-            close_pos_side = "SELL" if direction == "long" else "BUY"
-            try:
-                self.client.set_position_sl(self.symbol, be_sl, side=close_pos_side)
-                db.mark_sniper_be_moved(trade_id, entry_price)
-                be_moved = True
+            # Mark BE as "moved" immediately — protection is now software-managed
+            db.mark_sniper_be_moved(trade_id, entry_price)
+            be_moved = True
+            logger.info(
+                f"SNIPER BE armed | {self.symbol} | Software stop at {round(entry_price, price_prec)}"
+            )
+
+        # --- Enforce software BE stop: close if price retraces to entry ---
+        if tp1_hit and be_moved:
+            be_breached = (direction == "long" and price <= entry_price) or \
+                          (direction == "short" and price >= entry_price)
+            if be_breached:
                 logger.info(
-                    f"SNIPER SL → BE | {self.symbol} | SL moved to {be_sl}"
+                    f"SNIPER BE triggered | {self.symbol} | Price {price:.4f} reached entry {entry_price:.4f} → closing"
                 )
-            except Exception as e:
-                logger.error(f"SNIPER BE move failed: {e}")
+                try:
+                    pos = self.refresh_position()
+                    if pos:
+                        remaining_qty = pos.get("qty", "0")
+                        self.client.place_order(
+                            symbol=self.symbol,
+                            side=close_side,
+                            trade_side="OPEN",
+                            qty=_qty_str(float(remaining_qty)),
+                            order_type="MARKET",
+                            reduce_only=True,
+                        )
+                        self._sync_closed_position(trade_id)
+                except Exception as e:
+                    logger.error(f"SNIPER BE close failed: {e}")
 
         # --- TP2: 50% close ---
         elif tp1_hit and not tp2_hit and _tp_reached(tp2_price):
