@@ -578,12 +578,12 @@
   <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 24px 4px">
     <span style="font-size:13px;font-weight:600;color:var(--muted)">Performance</span>
     <div id="day-filters" style="display:flex;gap:6px">
-      <button class="day-btn active" onclick="setDayFilter(1,this)">1D</button>
+      <button class="day-btn" onclick="setDayFilter(1,this)">1D</button>
       <button class="day-btn" onclick="setDayFilter(5,this)">5D</button>
       <button class="day-btn" onclick="setDayFilter(7,this)">7D</button>
       <button class="day-btn" onclick="setDayFilter(14,this)">14D</button>
       <button class="day-btn" onclick="setDayFilter(30,this)">30D</button>
-      <button class="day-btn" onclick="setDayFilter(0,this)">All</button>
+      <button class="day-btn active" onclick="setDayFilter(0,this)">All</button>
     </div>
   </div>
 
@@ -905,7 +905,7 @@
   let _historyPage = 0;
   const _PAGE_SIZE  = 10;
   let _closedTrades = [];
-  let _historyDays  = 1;  // default: show last 1 day
+  let _historyDays  = 0;  // default: show all trades
 
   function setDayFilter(days, btn) {
     _historyDays = days;
