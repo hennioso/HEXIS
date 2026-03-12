@@ -28,6 +28,7 @@ class Trader:
         self.symbol = symbol
         self.current_position: Optional[dict] = None
         self._current_trade_id: Optional[str] = None  # DB trade ID of the open position
+        self._last_sniper_swing: tuple[float, float] | None = None  # (swing_high, swing_low) of last entry
         db.init_db()
         self._recover_open_position()
 
@@ -250,6 +251,18 @@ class Trader:
             logger.warning(f"DB already has an open trade for {self.symbol} – skipping SNIPER.")
             return None
 
+        # Block re-entry on the same Fibonacci swing (prevents opening the same trade twice
+        # after a quick SL/BE hit while price is still at the 0.882 level)
+        if self._last_sniper_swing is not None:
+            last_high, last_low = self._last_sniper_swing
+            if (abs(sniper.swing_high - last_high) / last_high < 0.001 and
+                    abs(sniper.swing_low - last_low) / last_low < 0.001):
+                logger.info(
+                    f"SNIPER: same Fibonacci swing as last trade "
+                    f"({last_low:.4f}–{last_high:.4f}) — skipping re-entry"
+                )
+                return None
+
         balance = self.get_available_balance()
         if balance < 10:
             logger.error(f"Insufficient capital: {balance:.2f} USDT")
@@ -351,6 +364,7 @@ class Trader:
                 tp3_price=sniper.tp3_price,
             )
             self._current_trade_id = trade_id
+            self._last_sniper_swing = (sniper.swing_high, sniper.swing_low)
             return result
         except Exception as e:
             logger.error(f"SNIPER order failed: {e}")
