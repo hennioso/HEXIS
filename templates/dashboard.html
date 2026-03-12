@@ -574,7 +574,35 @@
     </div>
   </div>
 
-  <!-- Trades Table -->
+  <!-- Active Trades -->
+  <div class="table-card" id="active-trades-card">
+    <div class="table-header">
+      <h3>Active Trades</h3>
+      <span class="badge" id="active-count">0 Open</span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Time (Entry)</th>
+            <th>Symbol</th>
+            <th>Direction</th>
+            <th>Qty</th>
+            <th>Entry</th>
+            <th>TP</th>
+            <th>SL</th>
+            <th>PnL (USDT)</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="active-tbody">
+          <tr><td colspan="9" class="loading">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Trade History -->
   <div class="table-card">
     <div class="table-header">
       <h3>Trade History</h3>
@@ -597,13 +625,17 @@
             <th>Status</th>
             <th>RSI Entry</th>
             <th>Trend 15m</th>
-            <th>Action</th>
           </tr>
         </thead>
         <tbody id="trades-tbody">
-          <tr><td colspan="14" class="loading">Loading trades...</td></tr>
+          <tr><td colspan="13" class="loading">Loading trades...</td></tr>
         </tbody>
       </table>
+    </div>
+    <div id="pagination" style="display:flex;align-items:center;justify-content:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border)">
+      <button id="page-prev" onclick="changePage(-1)" style="padding:4px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer">‹ Prev</button>
+      <span id="page-info" style="color:var(--muted);font-size:13px">Page 1</span>
+      <button id="page-next" onclick="changePage(1)"  style="padding:4px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer">Next ›</button>
     </div>
   </div>
 
@@ -779,13 +811,92 @@
   }
   // ----------------------------------
 
+  let _historyPage = 0;
+  const _PAGE_SIZE  = 10;
+  let _closedTrades = [];
+
+  function trendLabel(t) {
+    return t.trend_15m === 'bull'   ? '<span style="color:var(--green)">↑ Bull</span>'
+         : t.trend_15m === 'bear'   ? '<span style="color:var(--red)">↓ Bear</span>'
+         : t.trend_15m === 'sniper' ? '<span style="color:#c792ea">🎯 Sniper</span>'
+         : t.trend_15m === 'fib'    ? '<span style="color:#c792ea">◈ Fib</span>'
+         : t.trend_15m === 'scalp'  ? '<span style="color:var(--muted)">~ Scalp</span>'
+         : '—';
+  }
+
+  function renderActiveTrades(open) {
+    const tbody = document.getElementById('active-tbody');
+    document.getElementById('active-count').textContent = `${open.length} Open`;
+    if (open.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:20px">No open positions</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = open.map(t => {
+      const upnl    = t.unrealized_pnl != null ? fmtPnl(t.unrealized_pnl) : '<span style="color:var(--muted)">—</span>';
+      const partial = t.partial_pnl_usdt
+          ? `<br><span style="font-size:10px;color:var(--muted)">+${parseFloat(t.partial_pnl_usdt).toFixed(2)} taken</span>`
+          : '';
+      return `<tr id="trade-row-${t.trade_id}">
+        <td style="color:var(--muted);font-size:12px">${fmtDate(t.entry_time)}</td>
+        <td><span class="sym-badge sym-${t.symbol.replace('USDT','')}">${t.symbol.replace('USDT','')}</span></td>
+        <td><span class="dir-badge dir-${t.direction}">${t.direction}</span></td>
+        <td>${fmt(t.qty, 4)}</td>
+        <td>${fmtPrice(t.entry_price)}</td>
+        <td style="color:var(--green);font-size:12px">${t.tp_price ? fmtPrice(t.tp_price) : '—'}</td>
+        <td style="color:var(--red);font-size:12px">${t.sl_price ? fmtPrice(t.sl_price) : '—'}</td>
+        <td><span style="font-size:11px;color:var(--muted)">uPnL </span>${upnl}${partial}</td>
+        <td><button class="close-btn" onclick="closePosition('${t.symbol}','${t.trade_id}',this)">Close</button></td>
+      </tr>`;
+    }).join('');
+  }
+
+  function renderHistoryPage() {
+    const tbody  = document.getElementById('trades-tbody');
+    const total  = _closedTrades.length;
+    const pages  = Math.max(1, Math.ceil(total / _PAGE_SIZE));
+    _historyPage = Math.max(0, Math.min(_historyPage, pages - 1));
+
+    document.getElementById('trade-count').textContent = `${total} Trades`;
+    document.getElementById('page-info').textContent   = `Page ${_historyPage + 1} / ${pages}`;
+    document.getElementById('page-prev').disabled = _historyPage === 0;
+    document.getElementById('page-next').disabled = _historyPage >= pages - 1;
+
+    if (total === 0) {
+      tbody.innerHTML = `<tr><td colspan="13"><div class="empty"><div class="icon">📊</div>No closed trades yet.</div></td></tr>`;
+      return;
+    }
+
+    const slice = _closedTrades.slice(_historyPage * _PAGE_SIZE, (_historyPage + 1) * _PAGE_SIZE);
+    const offset = total - _historyPage * _PAGE_SIZE;
+    tbody.innerHTML = slice.map((t, i) => `
+      <tr>
+        <td style="color:var(--muted)">${offset - i}</td>
+        <td style="color:var(--muted);font-size:12px">${fmtDate(t.entry_time)}</td>
+        <td><span class="sym-badge sym-${t.symbol.replace('USDT','')}">${t.symbol.replace('USDT','')}</span></td>
+        <td><span class="dir-badge dir-${t.direction}">${t.direction}</span></td>
+        <td>${fmt(t.qty, 4)}</td>
+        <td>${fmtPrice(t.entry_price)}</td>
+        <td>${t.exit_price ? fmtPrice(t.exit_price) : '—'}</td>
+        <td style="color:var(--green);font-size:12px">${t.tp_price ? fmtPrice(t.tp_price) : '—'}</td>
+        <td style="color:var(--red);font-size:12px">${t.sl_price ? fmtPrice(t.sl_price) : '—'}</td>
+        <td>${fmtPnl(t.pnl_usdt)}</td>
+        <td>${statusBadge(t.status)}</td>
+        <td style="color:var(--muted)">${t.rsi_entry ? fmt(t.rsi_entry, 1) : '—'}</td>
+        <td>${trendLabel(t)}</td>
+      </tr>
+    `).join('');
+  }
+
+  function changePage(dir) {
+    _historyPage += dir;
+    renderHistoryPage();
+  }
+
   async function loadTrades() {
     const r = await fetch('/api/trades');
     const trades = await r.json();
 
-    document.getElementById('trade-count').textContent = `${trades.length} Trades`;
-
-    // Check for status changes and send notifications
+    // Notifications
     trades.forEach(t => {
       const prev = _prevTradeStates[t.trade_id];
       const sym = t.symbol.replace('USDT', '');
@@ -807,51 +918,9 @@
       _prevTradeStates[t.trade_id] = t.status;
     });
 
-    const tbody = document.getElementById('trades-tbody');
-    if (trades.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="14">
-        <div class="empty"><div class="icon">📊</div>No trades yet.<br>Waiting for the first signal.</div>
-      </td></tr>`;
-      return;
-    }
-
-    tbody.innerHTML = trades.map((t, i) => `
-      <tr id="trade-row-${t.trade_id}">
-        <td style="color:var(--muted)">${trades.length - i}</td>
-        <td style="color:var(--muted);font-size:12px">${fmtDate(t.entry_time)}</td>
-        <td><span class="sym-badge sym-${t.symbol.replace('USDT','')}">${t.symbol.replace('USDT','')}</span></td>
-        <td><span class="dir-badge dir-${t.direction}">${t.direction}</span></td>
-        <td>${fmt(t.qty, 4)}</td>
-        <td>${fmtPrice(t.entry_price)}</td>
-        <td>${t.exit_price ? fmtPrice(t.exit_price) : '<span style="color:var(--muted)">Open</span>'}</td>
-        <td style="color:var(--green);font-size:12px">${t.tp_price ? fmtPrice(t.tp_price) : '—'}</td>
-        <td style="color:var(--red);font-size:12px">${t.sl_price ? fmtPrice(t.sl_price) : '—'}</td>
-        <td>${t.status === 'open'
-            ? (() => {
-                const upnl    = t.unrealized_pnl != null ? fmtPnl(t.unrealized_pnl) : '<span style="color:var(--muted)">—</span>';
-                const partial = t.partial_pnl_usdt
-                    ? `<br><span style="font-size:10px;color:var(--muted)">+${parseFloat(t.partial_pnl_usdt).toFixed(2)} taken</span>`
-                    : '';
-                return `<span style="font-size:11px;color:var(--muted)">uPnL </span>${upnl}${partial}`;
-              })()
-            : fmtPnl(t.pnl_usdt)}</td>
-        <td>${statusBadge(t.status)}</td>
-        <td style="color:var(--muted)">${t.rsi_entry ? fmt(t.rsi_entry, 1) : '—'}</td>
-        <td>
-          ${t.trend_15m === 'bull' ? '<span style="color:var(--green)">↑ Bull</span>'
-            : t.trend_15m === 'bear' ? '<span style="color:var(--red)">↓ Bear</span>'
-            : t.trend_15m === 'sniper' ? '<span style="color:#c792ea">🎯 Sniper</span>'
-            : t.trend_15m === 'fib'  ? '<span style="color:#c792ea">◈ Fib</span>'
-            : t.trend_15m === 'scalp' ? '<span style="color:var(--muted)">~ Scalp</span>'
-            : '—'}
-        </td>
-        <td>
-          ${t.status === 'open'
-            ? `<button class="close-btn" onclick="closePosition('${t.symbol}','${t.trade_id}',this)">Close</button>`
-            : '<span style="color:var(--muted)">—</span>'}
-        </td>
-      </tr>
-    `).join('');
+    renderActiveTrades(trades.filter(t => t.status === 'open'));
+    _closedTrades = trades.filter(t => t.status !== 'open');
+    renderHistoryPage();
   }
 
   async function loadPnlChart() {
