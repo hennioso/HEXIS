@@ -73,6 +73,15 @@ def _sync_open_trades():
                     if unrealized != 0:
                         break
             db.update_unrealized_pnl(trade["trade_id"], unrealized)
+
+            # Sync margin + leverage from exchange
+            margin_val = pos.get("margin")
+            lev_val    = pos.get("leverage")
+            if margin_val is not None and lev_val is not None:
+                try:
+                    db.update_trade_margin(trade["trade_id"], float(margin_val), int(lev_val))
+                except Exception:
+                    pass
             continue  # noch offen, nichts tun
 
         # Nicht mehr auf Exchange → schließen
