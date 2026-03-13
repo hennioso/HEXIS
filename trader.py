@@ -640,50 +640,50 @@ class Trader:
                 except Exception as e:
                     logger.error(f"SNIPER BE close failed: {e}")
 
-        # --- TP2: 50% close ---
-        elif tp1_hit and not tp2_hit and _tp_reached(tp2_price):
-            qty_tp2 = round(qty_total * 0.50, self.rm.qty_precision)
-            if qty_tp2 >= self.rm.min_qty:
-                try:
-                    self.client.place_order(
-                        symbol=self.symbol,
-                        side=close_side,
-                        trade_side="OPEN",
-                        qty=_qty_str(qty_tp2),
-                        order_type="MARKET",
-                        reduce_only=True,
-                    )
-                    db.mark_sniper_tp(trade_id, 2)
-                    pnl_tp2 = qty_tp2 * abs(price - entry_price)
-                    db.add_partial_pnl(trade_id, round(pnl_tp2, 4))
-                    logger.info(
-                        f"SNIPER TP2 | {self.symbol} | Closed 50% ({qty_tp2}) @ {price:.4f}"
-                    )
-                except Exception as e:
-                    logger.error(f"SNIPER TP2 close failed: {e}")
+            # --- TP2: 50% close ---
+            elif not tp2_hit and _tp_reached(tp2_price):
+                qty_tp2 = round(qty_total * 0.50, self.rm.qty_precision)
+                if qty_tp2 >= self.rm.min_qty:
+                    try:
+                        self.client.place_order(
+                            symbol=self.symbol,
+                            side=close_side,
+                            trade_side="OPEN",
+                            qty=_qty_str(qty_tp2),
+                            order_type="MARKET",
+                            reduce_only=True,
+                        )
+                        db.mark_sniper_tp(trade_id, 2)
+                        pnl_tp2 = qty_tp2 * abs(price - entry_price)
+                        db.add_partial_pnl(trade_id, round(pnl_tp2, 4))
+                        logger.info(
+                            f"SNIPER TP2 | {self.symbol} | Closed 50% ({qty_tp2}) @ {price:.4f}"
+                        )
+                    except Exception as e:
+                        logger.error(f"SNIPER TP2 close failed: {e}")
 
-        # --- TP3: 25% close ---
-        elif tp1_hit and tp2_hit and not tp3_hit and _tp_reached(tp3_price):
-            qty_tp3 = round(qty_total * 0.25, self.rm.qty_precision)
-            if qty_tp3 >= self.rm.min_qty:
-                try:
-                    self.client.place_order(
-                        symbol=self.symbol,
-                        side=close_side,
-                        trade_side="OPEN",
-                        qty=_qty_str(qty_tp3),
-                        order_type="MARKET",
-                        reduce_only=True,
-                    )
-                    db.mark_sniper_tp(trade_id, 3)
-                    pnl_tp3 = qty_tp3 * abs(price - entry_price)
-                    db.add_partial_pnl(trade_id, round(pnl_tp3, 4))
-                    logger.info(
-                        f"SNIPER TP3 | {self.symbol} | Closed 25% ({qty_tp3}) @ {price:.4f} | "
-                        f"5% running open-end with BE stop"
-                    )
-                except Exception as e:
-                    logger.error(f"SNIPER TP3 close failed: {e}")
+            # --- TP3: 25% close ---
+            elif tp2_hit and not tp3_hit and _tp_reached(tp3_price):
+                qty_tp3 = round(qty_total * 0.25, self.rm.qty_precision)
+                if qty_tp3 >= self.rm.min_qty:
+                    try:
+                        self.client.place_order(
+                            symbol=self.symbol,
+                            side=close_side,
+                            trade_side="OPEN",
+                            qty=_qty_str(qty_tp3),
+                            order_type="MARKET",
+                            reduce_only=True,
+                        )
+                        db.mark_sniper_tp(trade_id, 3)
+                        pnl_tp3 = qty_tp3 * abs(price - entry_price)
+                        db.add_partial_pnl(trade_id, round(pnl_tp3, 4))
+                        logger.info(
+                            f"SNIPER TP3 | {self.symbol} | Closed 25% ({qty_tp3}) @ {price:.4f} | "
+                            f"5% running open-end with BE stop"
+                        )
+                    except Exception as e:
+                        logger.error(f"SNIPER TP3 close failed: {e}")
 
     def close_position(self, reason: str = "manual", exit_price: float = None) -> Optional[dict]:
         """Closes the current open position with a market order."""
