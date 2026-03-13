@@ -20,6 +20,7 @@ from strategy import check_signal
 from strategy_scalp import check_scalp_signal, ScalpSignal
 from strategy_sniper import check_sniper_signal
 from strategy_lsob import check_lsob_signal
+from strategy_selector import select_strategy
 from strategy import Signal
 from risk_manager import RiskManager
 from trader import Trader
@@ -64,6 +65,17 @@ def symbol_loop(
 
             klines_5m = client.get_klines(symbol, config.FAST_TF, limit=config.KLINE_LIMIT)
 
+            # AUTO: let the selector agent pick the best strategy this tick
+            if strategy == "auto":
+                klines_15m_auto = client.get_klines(symbol, "15m", limit=100)
+                chosen, scores = select_strategy(
+                    symbol=symbol,
+                    klines_5m=klines_5m,
+                    klines_15m=klines_15m_auto,
+                    current_strategy=_last_strategy if _last_strategy != "auto" else "sniper",
+                )
+                strategy = chosen   # execute as chosen strategy this tick
+
             has_position = trader.has_open_position()
 
             if has_position:
@@ -73,7 +85,7 @@ def symbol_loop(
                     f"Qty: {pos.get('qty')} | "
                     f"uPNL: {pos.get('unrealizedPNL', 'N/A')}"
                 )
-                # SNIPER: monitor partial TP levels every tick
+                # SNIPER / AUTO→SNIPER: monitor partial TP levels every tick
                 if strategy == "sniper":
                     trader.monitor_sniper_tps()
             elif strategy == "sniper":
