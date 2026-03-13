@@ -81,9 +81,12 @@ def symbol_loop(
                 klines_sniper = client.get_klines(
                     symbol, config.SNIPER_TF, limit=config.SNIPER_KLINE_LIMIT
                 )
+                # 15m klines for EMA50 trend filter (don't short uptrends / long downtrends)
+                klines_15m_filter = client.get_klines(symbol, "15m", limit=100)
                 sniper = check_sniper_signal(
                     klines_5m=klines_sniper,
                     lookback=config.FIB_LOOKBACK,
+                    klines_15m=klines_15m_filter,
                 )
                 if sniper:
                     log.info(

@@ -511,7 +511,7 @@ class Trader:
         """
         Called every loop tick when a SNIPER position is open.
         Checks TP1/TP2/TP3 levels and executes partial closes:
-          - TP1 (Fib 0.786) → close 20% + move SL to Break Even
+          - TP1 (Fib 0.820) → close 30% + move SL to Break Even
           - TP2 (Fib 0.650) → close 50%
           - TP3 (Fib 0.500) → close 25%
           - 5% stays open (protected by BE stop)
@@ -562,9 +562,9 @@ class Trader:
         else:
             price_prec = 5
 
-        # --- TP1: 20% close ---
+        # --- TP1: 30% close ---
         if not tp1_hit and _tp_reached(tp1_price):
-            qty_tp1 = round(qty_total * 0.20, self.rm.qty_precision)
+            qty_tp1 = round(qty_total * 0.30, self.rm.qty_precision)
             if qty_tp1 >= self.rm.min_qty:
                 try:
                     self.client.place_order(
@@ -580,7 +580,7 @@ class Trader:
                     db.add_partial_pnl(trade_id, round(pnl_tp1, 4))
                     tp1_hit = True  # update local state so BE move runs this tick
                     logger.info(
-                        f"SNIPER TP1 | {self.symbol} | Closed 20% ({qty_tp1}) @ {price:.4f}"
+                        f"SNIPER TP1 | {self.symbol} | Closed 30% ({qty_tp1}) @ {price:.4f}"
                     )
                 except Exception as e:
                     logger.error(f"SNIPER TP1 close failed: {e}")
