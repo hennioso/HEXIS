@@ -113,18 +113,16 @@
 
     /* ---- Symbol Strip ---- */
     .symbol-strip {
-      display: flex;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
       gap: 10px;
       margin-bottom: 16px;
-      flex-wrap: wrap;
     }
     .sym-card {
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 12px 18px;
-      flex: 1;
-      min-width: 160px;
       cursor: pointer;
       transition: border-color 0.15s;
       position: relative;
@@ -583,6 +581,29 @@
 
 <main>
 
+  <!-- Balance Banner (moved above symbol strip) -->
+  <div class="balance-banner" id="balance-banner">
+    <div class="bal-item">
+      <span class="bal-label">Available</span>
+      <span class="bal-value green" id="b-available">—</span>
+    </div>
+    <div class="bal-divider"></div>
+    <div class="bal-item">
+      <span class="bal-label">In Margin</span>
+      <span class="bal-value yellow" id="b-margin">—</span>
+    </div>
+    <div class="bal-divider"></div>
+    <div class="bal-item">
+      <span class="bal-label">Unrealized PnL</span>
+      <span class="bal-value" id="b-upnl">—</span>
+    </div>
+    <div class="bal-divider"></div>
+    <div class="bal-item">
+      <span class="bal-label">Total (Est.)</span>
+      <span class="bal-value blue" id="b-total">—</span>
+    </div>
+  </div>
+
   <!-- Symbol Strip -->
   <div class="symbol-strip" id="symbol-strip">
     <div class="sym-card active" data-symbol="BTCUSDT">
@@ -678,28 +699,6 @@
     </div>
   </div>
 
-  <!-- Balance Banner -->
-  <div class="balance-banner" id="balance-banner">
-    <div class="bal-item">
-      <span class="bal-label">Available</span>
-      <span class="bal-value green" id="b-available">—</span>
-    </div>
-    <div class="bal-divider"></div>
-    <div class="bal-item">
-      <span class="bal-label">In Margin</span>
-      <span class="bal-value yellow" id="b-margin">—</span>
-    </div>
-    <div class="bal-divider"></div>
-    <div class="bal-item">
-      <span class="bal-label">Unrealized PnL</span>
-      <span class="bal-value" id="b-upnl">—</span>
-    </div>
-    <div class="bal-divider"></div>
-    <div class="bal-item">
-      <span class="bal-label">Total (Est.)</span>
-      <span class="bal-value blue" id="b-total">—</span>
-    </div>
-  </div>
 
   <!-- Stats period filter -->
   <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 24px 4px">
