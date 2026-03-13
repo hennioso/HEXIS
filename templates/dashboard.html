@@ -127,9 +127,37 @@
       min-width: 160px;
       cursor: pointer;
       transition: border-color 0.15s;
+      position: relative;
     }
     .sym-card:hover  { border-color: var(--blue); }
     .sym-card.active { border-color: var(--blue); background: rgba(88,166,255,0.06); }
+    .auto-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      padding: 2px 7px;
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      border-radius: 4px;
+      border: 1px solid rgba(255,120,180,0.3);
+      background: rgba(255,120,180,0.06);
+      color: rgba(255,120,180,0.5);
+      cursor: pointer;
+      transition: all 0.15s;
+      z-index: 1;
+    }
+    .auto-btn:hover {
+      background: rgba(255,120,180,0.18);
+      border-color: #ff78b4;
+      color: #ff78b4;
+    }
+    .auto-btn.active-auto {
+      background: rgba(255,120,180,0.18);
+      border-color: #ff78b4;
+      color: #ff78b4;
+      box-shadow: 0 0 6px rgba(255,120,180,0.3);
+    }
     .sym-card .sym-name { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
     .sym-card .sym-price { font-size: 18px; font-weight: 700; }
     .sym-card .sym-chg   { font-size: 12px; font-weight: 600; margin-top: 2px; }
@@ -398,7 +426,7 @@
     /* ---- Strategy Selector Buttons ---- */
     .strat-btns {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 3px;
       margin-top: 8px;
     }
@@ -558,6 +586,7 @@
   <!-- Symbol Strip -->
   <div class="symbol-strip" id="symbol-strip">
     <div class="sym-card active" data-symbol="BTCUSDT">
+      <button class="auto-btn" data-strat="auto" onclick="setStrategy('BTCUSDT','auto',event)">AUTO</button>
       <div class="sym-name">BTC/USDT</div>
       <div class="sym-price" id="sym-price-BTCUSDT">—</div>
       <div class="sym-chg"  id="sym-chg-BTCUSDT">—</div>
@@ -566,10 +595,11 @@
         <button class="strat-btn" data-strat="scalp"   onclick="setStrategy('BTCUSDT','scalp',event)">SCALP</button>
         <button class="strat-btn" data-strat="sniper"  onclick="setStrategy('BTCUSDT','sniper',event)">SNIPER</button>
         <button class="strat-btn" data-strat="lsob"    onclick="setStrategy('BTCUSDT','lsob',event)">LSOB</button>
-        <button class="strat-btn" data-strat="auto"    onclick="setStrategy('BTCUSDT','auto',event)">AUTO</button>
+
       </div>
     </div>
     <div class="sym-card" data-symbol="ETHUSDT">
+      <button class="auto-btn" data-strat="auto" onclick="setStrategy('ETHUSDT','auto',event)">AUTO</button>
       <div class="sym-name">ETH/USDT</div>
       <div class="sym-price" id="sym-price-ETHUSDT">—</div>
       <div class="sym-chg"  id="sym-chg-ETHUSDT">—</div>
@@ -578,10 +608,11 @@
         <button class="strat-btn" data-strat="scalp"   onclick="setStrategy('ETHUSDT','scalp',event)">SCALP</button>
         <button class="strat-btn" data-strat="sniper"  onclick="setStrategy('ETHUSDT','sniper',event)">SNIPER</button>
         <button class="strat-btn" data-strat="lsob"    onclick="setStrategy('ETHUSDT','lsob',event)">LSOB</button>
-        <button class="strat-btn" data-strat="auto"    onclick="setStrategy('ETHUSDT','auto',event)">AUTO</button>
+
       </div>
     </div>
     <div class="sym-card" data-symbol="SOLUSDT">
+      <button class="auto-btn" data-strat="auto" onclick="setStrategy('SOLUSDT','auto',event)">AUTO</button>
       <div class="sym-name">SOL/USDT</div>
       <div class="sym-price" id="sym-price-SOLUSDT">—</div>
       <div class="sym-chg"  id="sym-chg-SOLUSDT">—</div>
@@ -590,10 +621,11 @@
         <button class="strat-btn" data-strat="scalp"   onclick="setStrategy('SOLUSDT','scalp',event)">SCALP</button>
         <button class="strat-btn" data-strat="sniper"  onclick="setStrategy('SOLUSDT','sniper',event)">SNIPER</button>
         <button class="strat-btn" data-strat="lsob"    onclick="setStrategy('SOLUSDT','lsob',event)">LSOB</button>
-        <button class="strat-btn" data-strat="auto"    onclick="setStrategy('SOLUSDT','auto',event)">AUTO</button>
+
       </div>
     </div>
     <div class="sym-card" data-symbol="XRPUSDT">
+      <button class="auto-btn" data-strat="auto" onclick="setStrategy('XRPUSDT','auto',event)">AUTO</button>
       <div class="sym-name">XRP/USDT</div>
       <div class="sym-price" id="sym-price-XRPUSDT">—</div>
       <div class="sym-chg"  id="sym-chg-XRPUSDT">—</div>
@@ -602,10 +634,11 @@
         <button class="strat-btn" data-strat="scalp"   onclick="setStrategy('XRPUSDT','scalp',event)">SCALP</button>
         <button class="strat-btn" data-strat="sniper"  onclick="setStrategy('XRPUSDT','sniper',event)">SNIPER</button>
         <button class="strat-btn" data-strat="lsob"    onclick="setStrategy('XRPUSDT','lsob',event)">LSOB</button>
-        <button class="strat-btn" data-strat="auto"    onclick="setStrategy('XRPUSDT','auto',event)">AUTO</button>
+
       </div>
     </div>
     <div class="sym-card" data-symbol="BNBUSDT">
+      <button class="auto-btn" data-strat="auto" onclick="setStrategy('BNBUSDT','auto',event)">AUTO</button>
       <div class="sym-name">BNB/USDT</div>
       <div class="sym-price" id="sym-price-BNBUSDT">—</div>
       <div class="sym-chg"  id="sym-chg-BNBUSDT">—</div>
@@ -614,10 +647,11 @@
         <button class="strat-btn" data-strat="scalp"   onclick="setStrategy('BNBUSDT','scalp',event)">SCALP</button>
         <button class="strat-btn" data-strat="sniper"  onclick="setStrategy('BNBUSDT','sniper',event)">SNIPER</button>
         <button class="strat-btn" data-strat="lsob"    onclick="setStrategy('BNBUSDT','lsob',event)">LSOB</button>
-        <button class="strat-btn" data-strat="auto"    onclick="setStrategy('BNBUSDT','auto',event)">AUTO</button>
+
       </div>
     </div>
     <div class="sym-card" data-symbol="HYPEUSDT">
+      <button class="auto-btn" data-strat="auto" onclick="setStrategy('HYPEUSDT','auto',event)">AUTO</button>
       <div class="sym-name">HYPE/USDT</div>
       <div class="sym-price" id="sym-price-HYPEUSDT">—</div>
       <div class="sym-chg"  id="sym-chg-HYPEUSDT">—</div>
@@ -626,10 +660,11 @@
         <button class="strat-btn" data-strat="scalp"   onclick="setStrategy('HYPEUSDT','scalp',event)">SCALP</button>
         <button class="strat-btn" data-strat="sniper"  onclick="setStrategy('HYPEUSDT','sniper',event)">SNIPER</button>
         <button class="strat-btn" data-strat="lsob"    onclick="setStrategy('HYPEUSDT','lsob',event)">LSOB</button>
-        <button class="strat-btn" data-strat="auto"    onclick="setStrategy('HYPEUSDT','auto',event)">AUTO</button>
+
       </div>
     </div>
     <div class="sym-card" data-symbol="ADAUSDT">
+      <button class="auto-btn" data-strat="auto" onclick="setStrategy('ADAUSDT','auto',event)">AUTO</button>
       <div class="sym-name">ADA/USDT</div>
       <div class="sym-price" id="sym-price-ADAUSDT">—</div>
       <div class="sym-chg"  id="sym-chg-ADAUSDT">—</div>
@@ -638,7 +673,7 @@
         <button class="strat-btn" data-strat="scalp"   onclick="setStrategy('ADAUSDT','scalp',event)">SCALP</button>
         <button class="strat-btn" data-strat="sniper"  onclick="setStrategy('ADAUSDT','sniper',event)">SNIPER</button>
         <button class="strat-btn" data-strat="lsob"    onclick="setStrategy('ADAUSDT','lsob',event)">LSOB</button>
-        <button class="strat-btn" data-strat="auto"    onclick="setStrategy('ADAUSDT','auto',event)">AUTO</button>
+
       </div>
     </div>
   </div>
@@ -1318,12 +1353,20 @@
 
   function updateStrategyButtons() {
     for (const [symbol, strat] of Object.entries(_strategies)) {
+      // Update 4 main strategy buttons
       const container = document.getElementById('strat-' + symbol);
-      if (!container) continue;
-      container.querySelectorAll('.strat-btn').forEach(btn => {
-        btn.classList.remove('active-trend', 'active-scalp', 'active-sniper', 'active-lsob', 'active-auto');
-        if (btn.dataset.strat === strat) btn.classList.add('active-' + strat);
-      });
+      if (container) {
+        container.querySelectorAll('.strat-btn').forEach(btn => {
+          btn.classList.remove('active-trend', 'active-scalp', 'active-sniper', 'active-lsob');
+          if (btn.dataset.strat === strat) btn.classList.add('active-' + strat);
+        });
+      }
+      // Update AUTO button (positioned separately in top-right corner)
+      const card = document.querySelector(`.sym-card[data-symbol="${symbol}"]`);
+      if (card) {
+        const autoBtn = card.querySelector('.auto-btn');
+        if (autoBtn) autoBtn.classList.toggle('active-auto', strat === 'auto');
+      }
     }
   }
 
