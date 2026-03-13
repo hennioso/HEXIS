@@ -1410,6 +1410,11 @@
       ? new Date(t.entry_time.endsWith('Z') ? t.entry_time : t.entry_time + 'Z')
       : null;
     const ageStr = entryDate ? _timeAgo(entryDate) : '—';
+    const marginTotal     = t.margin_usdt ? parseFloat(t.margin_usdt) : null;
+    const leverage        = t.leverage   ? parseInt(t.leverage)       : null;
+    const marginRemaining = (marginTotal && qtyTotal > 0)
+      ? marginTotal * (qtyRemaining / qtyTotal) : null;
+
     html += `<div class="modal-section">
       <div class="modal-section-label">Position</div>
       <div class="modal-row">
@@ -1420,6 +1425,18 @@
         <span class="modal-row-label">Remaining Qty</span>
         <span class="modal-row-value">${fmt(qtyRemaining, 4)}</span>
       </div>
+      ${leverage ? `<div class="modal-row">
+        <span class="modal-row-label">Leverage</span>
+        <span class="modal-row-value">${leverage}x</span>
+      </div>` : ''}
+      ${marginTotal !== null ? `<div class="modal-row">
+        <span class="modal-row-label">Margin used</span>
+        <span class="modal-row-value">${marginTotal.toFixed(2)} USDT</span>
+      </div>` : ''}
+      ${marginRemaining !== null && qtyRemaining < qtyTotal ? `<div class="modal-row">
+        <span class="modal-row-label">Margin remaining</span>
+        <span class="modal-row-value">${marginRemaining.toFixed(2)} USDT</span>
+      </div>` : ''}
       <div class="modal-row">
         <span class="modal-row-label">Open for</span>
         <span class="modal-row-value" style="color:var(--muted)">${ageStr}</span>
@@ -1438,10 +1455,11 @@
       tps.forEach(tp => {
         let distStr = '';
         if (livePrice && !tp.hit) {
-          const dist    = (tp.price - livePrice) * dirMult;
-          const distPct = dist / livePrice * 100;
-          const col     = dist > 0 ? 'var(--green)' : 'var(--red)';
-          distStr = `<span style="color:${col}">${dist > 0 ? '' : ''}${dist.toFixed(4)}<br>(${distPct.toFixed(2)}%)</span>`;
+          const dist      = (tp.price - livePrice) * dirMult;
+          const distPct   = dist / livePrice * 100;
+          const distUsdt  = dist * qtyRemaining;
+          const col       = dist > 0 ? 'var(--green)' : 'var(--red)';
+          distStr = `<span style="color:${col}">${distUsdt >= 0 ? '+' : ''}${distUsdt.toFixed(2)} USDT<br>(${distPct.toFixed(2)}%)</span>`;
         } else if (tp.hit) {
           distStr = `<span style="color:var(--green)">Done</span>`;
         }
@@ -1459,10 +1477,11 @@
       const tpPrice = parseFloat(t.tp_price);
       let distStr = '';
       if (livePrice) {
-        const dist    = (tpPrice - livePrice) * dirMult;
-        const distPct = dist / livePrice * 100;
-        const col     = dist > 0 ? 'var(--green)' : 'var(--red)';
-        distStr = `<span style="color:${col}">${dist.toFixed(4)}<br>(${distPct.toFixed(2)}%)</span>`;
+        const dist     = (tpPrice - livePrice) * dirMult;
+        const distPct  = dist / livePrice * 100;
+        const distUsdt = dist * qtyRemaining;
+        const col      = dist > 0 ? 'var(--green)' : 'var(--red)';
+        distStr = `<span style="color:${col}">${distUsdt >= 0 ? '+' : ''}${distUsdt.toFixed(2)} USDT<br>(${distPct.toFixed(2)}%)</span>`;
       }
       html += `<div class="tp-level">
         <span class="tp-icon">🎯</span>
@@ -1478,9 +1497,10 @@
       const slPrice = parseFloat(t.sl_price);
       let slDistStr = '';
       if (livePrice) {
-        const dist    = (slPrice - livePrice) * dirMult;
-        const distPct = Math.abs(dist / livePrice * 100);
-        slDistStr = `<span style="color:var(--red)">${dist.toFixed(4)}<br>(${distPct.toFixed(2)}%)</span>`;
+        const dist     = (slPrice - livePrice) * dirMult;
+        const distPct  = Math.abs(dist / livePrice * 100);
+        const distUsdt = dist * qtyRemaining;
+        slDistStr = `<span style="color:var(--red)">${distUsdt.toFixed(2)} USDT<br>(${distPct.toFixed(2)}%)</span>`;
       }
       const beLabel = t.be_moved ? '<span class="be-badge">BE</span>' : '';
       html += `<div class="sl-level">
