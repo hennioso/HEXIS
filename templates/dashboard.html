@@ -1454,9 +1454,9 @@
       ];
       tps.forEach(tp => {
         let distStr = '';
-        if (livePrice && !tp.hit) {
-          const dist      = (tp.price - livePrice) * dirMult;
-          const distPct   = dist / livePrice * 100;
+        if (!tp.hit) {
+          const dist      = (tp.price - entry) * dirMult;
+          const distPct   = Math.abs(tp.price - entry) / entry * 100;
           const distUsdt  = dist * qtyRemaining;
           const col       = dist > 0 ? 'var(--green)' : 'var(--red)';
           distStr = `<span style="color:${col}">${distUsdt >= 0 ? '+' : ''}${distUsdt.toFixed(2)} USDT<br>(${distPct.toFixed(2)}%)</span>`;
@@ -1476,9 +1476,9 @@
     } else if (t.tp_price) {
       const tpPrice = parseFloat(t.tp_price);
       let distStr = '';
-      if (livePrice) {
-        const dist     = (tpPrice - livePrice) * dirMult;
-        const distPct  = dist / livePrice * 100;
+      {
+        const dist     = (tpPrice - entry) * dirMult;
+        const distPct  = Math.abs(tpPrice - entry) / entry * 100;
         const distUsdt = dist * qtyRemaining;
         const col      = dist > 0 ? 'var(--green)' : 'var(--red)';
         distStr = `<span style="color:${col}">${distUsdt >= 0 ? '+' : ''}${distUsdt.toFixed(2)} USDT<br>(${distPct.toFixed(2)}%)</span>`;
@@ -1496,9 +1496,9 @@
     if (t.sl_price) {
       const slPrice = parseFloat(t.sl_price);
       let slDistStr = '';
-      if (livePrice) {
-        const dist     = (slPrice - livePrice) * dirMult;
-        const distPct  = Math.abs(dist / livePrice * 100);
+      {
+        const dist     = (slPrice - entry) * dirMult;
+        const distPct  = Math.abs(slPrice - entry) / entry * 100;
         const distUsdt = dist * qtyRemaining;
         slDistStr = `<span style="color:var(--red)">${distUsdt.toFixed(2)} USDT<br>(${distPct.toFixed(2)}%)</span>`;
       }
