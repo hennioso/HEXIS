@@ -394,7 +394,7 @@ def api_close_position():
             order_result = _client.place_order(
                 symbol=symbol,
                 side=close_side,
-                trade_side="CLOSE",
+                trade_side="OPEN",
                 qty=qty,
                 order_type="MARKET",
                 reduce_only=True,
