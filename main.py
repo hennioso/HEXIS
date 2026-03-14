@@ -17,6 +17,7 @@ import config
 import strategy_state
 import strategy_scanner
 import trade_analyst
+import circuit_breaker
 from exchange import BitunixClient
 from strategy import check_signal
 from strategy_scalp import check_scalp_signal, ScalpSignal
@@ -374,6 +375,11 @@ def main():
     logger.info(f"  Scalp-SL/TP: {config.SCALP_STOP_LOSS_PCT*100:.1f}% / {config.SCALP_TAKE_PROFIT_PCT*100:.1f}%")
     logger.info(f"  Leverage: {config.LEVERAGE}x | Learning phase: {config.MAX_MARGIN_USDT:.0f} USDT × {config.MAX_MARGIN_TRADES} trades")
     logger.info("=" * 60)
+
+    circuit_breaker.init(
+        daily_limit_usdt=config.DAILY_LOSS_LIMIT_USDT,
+        max_consecutive_losses=config.MAX_CONSECUTIVE_LOSSES,
+    )
 
     client = BitunixClient(config.API_KEY, config.SECRET_KEY)
 

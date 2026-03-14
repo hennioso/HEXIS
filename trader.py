@@ -13,6 +13,8 @@ from risk_manager import RiskManager, TradeParams
 from strategy_sniper import SniperSignal
 from strategy_lsob import LSOBSignal
 import database as db
+import notifications
+import circuit_breaker
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +126,21 @@ class Trader:
             f"Externally closed position detected | Status: {status} | "
             f"Exit: {exit_price:.4f} | trade_id: {trade_id}"
         )
+        # Notify + record for circuit breaker
+        if trade:
+            closed_trade = db.get_trade(trade_id)
+            pnl  = float(closed_trade.get("pnl_usdt") or 0) if closed_trade else 0.0
+            strat = (trade.get("strategy") or "trend")
+            circuit_breaker.record_trade(strat, pnl)
+            notifications.send_trade_close(
+                symbol=self.symbol,
+                direction=trade.get("direction", ""),
+                strategy=strat,
+                entry=float(trade.get("entry_price") or 0),
+                exit_p=exit_price,
+                pnl=pnl,
+                status=status,
+            )
         self._current_trade_id = None
 
     def _get_actual_exit_price(self, trade_id: str, trade: dict | None) -> float:
@@ -159,11 +176,17 @@ class Trader:
         balance = self.client.get_balance("USDT")
         return float(balance.get("available", 0))
 
-    def open_position(self, signal: Signal, sl_price_override: float = None) -> Optional[dict]:
+    def open_position(self, signal: Signal, sl_price_override: float = None, strategy: str = "trend") -> Optional[dict]:
         """
         Opens a new position based on the signal.
         Returns the order response or None on error.
         """
+        # Circuit breaker check
+        ok, reason = circuit_breaker.is_trading_allowed(strategy)
+        if not ok:
+            logger.warning(f"Circuit breaker blocked trade: {reason}")
+            return None
+
         if self.has_open_position():
             logger.warning("Position already open – skipping new trade.")
             return None
@@ -230,8 +253,18 @@ class Trader:
                 sl_price=float(trade_params.sl_price),
                 rsi_entry=signal.rsi_5m,
                 trend_15m=signal.trend_15m,
+                strategy=strategy,
             )
             self._current_trade_id = trade_id
+            notifications.send_trade_open(
+                symbol=self.symbol,
+                direction=signal.direction,
+                strategy=strategy,
+                entry=trade_params.entry_price,
+                tp=float(trade_params.tp_price),
+                sl=float(trade_params.sl_price),
+                qty=float(trade_params.qty),
+            )
             return result
         except Exception as e:
             logger.error(f"Order failed: {e}")
@@ -242,6 +275,11 @@ class Trader:
         Opens a SNIPER position at Fib 0.882 with a structural SL.
         No exchange TP is set — partial TPs are managed by monitor_sniper_tps().
         """
+        ok, reason = circuit_breaker.is_trading_allowed("sniper")
+        if not ok:
+            logger.warning(f"Circuit breaker blocked SNIPER: {reason}")
+            return None
+
         if self.has_open_position():
             logger.warning("Position already open – skipping SNIPER trade.")
             return None
@@ -367,6 +405,15 @@ class Trader:
             )
             self._current_trade_id = trade_id
             self._last_sniper_swing = (sniper.swing_high, sniper.swing_low)
+            notifications.send_trade_open(
+                symbol=self.symbol,
+                direction=sniper.direction,
+                strategy="sniper",
+                entry=entry_price,
+                tp=sniper.tp3_price,
+                sl=sniper.sl_price,
+                qty=float(qty),
+            )
             return result
         except Exception as e:
             logger.error(f"SNIPER order failed: {e}")
@@ -379,6 +426,11 @@ class Trader:
         SL is placed structurally beyond the sweep wick.
         TP targets the prior opposite liquidity.
         """
+        ok, reason = circuit_breaker.is_trading_allowed("lsob")
+        if not ok:
+            logger.warning(f"Circuit breaker blocked LSOB: {reason}")
+            return None
+
         if self.has_open_position():
             logger.warning("Position already open – skipping LSOB trade.")
             return None
@@ -502,6 +554,15 @@ class Trader:
                 self._last_sniper_swing = (lsob.sweep_price, lsob.ob_bottom)
             else:
                 self._last_sniper_swing = (lsob.ob_top, lsob.sweep_price)
+            notifications.send_trade_open(
+                symbol=self.symbol,
+                direction=lsob.direction,
+                strategy="lsob",
+                entry=entry_price,
+                tp=lsob.tp_price,
+                sl=lsob.sl_price,
+                qty=float(qty),
+            )
             return result
         except Exception as e:
             logger.error(f"LSOB order failed: {e}")
