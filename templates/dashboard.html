@@ -129,32 +129,41 @@
     }
     .sym-card:hover  { border-color: var(--blue); }
     .sym-card.active { border-color: var(--blue); background: rgba(88,166,255,0.06); }
-    .auto-btn {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      padding: 2px 7px;
-      font-size: 8px;
+    .agent-mode-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      gap: 16px;
+    }
+    .agent-mode-bar-label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .agent-mode-btn {
+      flex: 1;
+      padding: 10px 20px;
+      font-size: 13px;
       font-weight: 700;
       letter-spacing: 0.06em;
-      border-radius: 4px;
-      border: 1px solid rgba(255,120,180,0.3);
-      background: rgba(255,120,180,0.06);
-      color: rgba(255,120,180,0.5);
+      border-radius: 8px;
+      border: 1px solid rgba(255,120,180,0.35);
+      background: rgba(255,120,180,0.07);
+      color: rgba(255,120,180,0.65);
       cursor: pointer;
-      transition: all 0.15s;
-      z-index: 1;
+      transition: all 0.18s;
+      text-align: center;
     }
-    .auto-btn:hover {
+    .agent-mode-btn:hover {
       background: rgba(255,120,180,0.18);
       border-color: #ff78b4;
       color: #ff78b4;
     }
-    .auto-btn.active-auto {
+    .agent-mode-btn.active {
       background: rgba(255,120,180,0.18);
       border-color: #ff78b4;
       color: #ff78b4;
-      box-shadow: 0 0 6px rgba(255,120,180,0.3);
+      box-shadow: 0 0 14px rgba(255,120,180,0.3);
     }
     .sym-card .sym-name { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
     .sym-card .sym-price { font-size: 18px; font-weight: 700; }
@@ -604,10 +613,14 @@
     </div>
   </div>
 
+  <!-- Agent Mode Bar -->
+  <div class="agent-mode-bar">
+    <button id="agent-mode-btn" class="agent-mode-btn" onclick="toggleAgentMode()">⚡ Agent Mode — OFF</button>
+  </div>
+
   <!-- Symbol Strip -->
   <div class="symbol-strip" id="symbol-strip">
     <div class="sym-card active" data-symbol="BTCUSDT">
-      <button class="auto-btn" data-strat="auto" onclick="setStrategy('BTCUSDT','auto',event)">AUTO</button>
       <div class="sym-name">BTC/USDT</div>
       <div class="sym-price" id="sym-price-BTCUSDT">—</div>
       <div class="sym-chg"  id="sym-chg-BTCUSDT">—</div>
@@ -620,7 +633,6 @@
       </div>
     </div>
     <div class="sym-card" data-symbol="ETHUSDT">
-      <button class="auto-btn" data-strat="auto" onclick="setStrategy('ETHUSDT','auto',event)">AUTO</button>
       <div class="sym-name">ETH/USDT</div>
       <div class="sym-price" id="sym-price-ETHUSDT">—</div>
       <div class="sym-chg"  id="sym-chg-ETHUSDT">—</div>
@@ -633,7 +645,6 @@
       </div>
     </div>
     <div class="sym-card" data-symbol="SOLUSDT">
-      <button class="auto-btn" data-strat="auto" onclick="setStrategy('SOLUSDT','auto',event)">AUTO</button>
       <div class="sym-name">SOL/USDT</div>
       <div class="sym-price" id="sym-price-SOLUSDT">—</div>
       <div class="sym-chg"  id="sym-chg-SOLUSDT">—</div>
@@ -646,7 +657,6 @@
       </div>
     </div>
     <div class="sym-card" data-symbol="XRPUSDT">
-      <button class="auto-btn" data-strat="auto" onclick="setStrategy('XRPUSDT','auto',event)">AUTO</button>
       <div class="sym-name">XRP/USDT</div>
       <div class="sym-price" id="sym-price-XRPUSDT">—</div>
       <div class="sym-chg"  id="sym-chg-XRPUSDT">—</div>
@@ -659,7 +669,6 @@
       </div>
     </div>
     <div class="sym-card" data-symbol="BNBUSDT">
-      <button class="auto-btn" data-strat="auto" onclick="setStrategy('BNBUSDT','auto',event)">AUTO</button>
       <div class="sym-name">BNB/USDT</div>
       <div class="sym-price" id="sym-price-BNBUSDT">—</div>
       <div class="sym-chg"  id="sym-chg-BNBUSDT">—</div>
@@ -672,7 +681,6 @@
       </div>
     </div>
     <div class="sym-card" data-symbol="HYPEUSDT">
-      <button class="auto-btn" data-strat="auto" onclick="setStrategy('HYPEUSDT','auto',event)">AUTO</button>
       <div class="sym-name">HYPE/USDT</div>
       <div class="sym-price" id="sym-price-HYPEUSDT">—</div>
       <div class="sym-chg"  id="sym-chg-HYPEUSDT">—</div>
@@ -685,7 +693,6 @@
       </div>
     </div>
     <div class="sym-card" data-symbol="ADAUSDT">
-      <button class="auto-btn" data-strat="auto" onclick="setStrategy('ADAUSDT','auto',event)">AUTO</button>
       <div class="sym-name">ADA/USDT</div>
       <div class="sym-price" id="sym-price-ADAUSDT">—</div>
       <div class="sym-chg"  id="sym-chg-ADAUSDT">—</div>
@@ -1341,6 +1348,7 @@
 
   // ---- Strategy Selector ----
   let _strategies = {};
+  let _agentMode  = false;
 
   async function loadStrategies() {
     try {
@@ -1351,22 +1359,55 @@
   }
 
   function updateStrategyButtons() {
+    let anyAuto = false;
     for (const [symbol, strat] of Object.entries(_strategies)) {
-      // Update 4 main strategy buttons
       const container = document.getElementById('strat-' + symbol);
       if (container) {
         container.querySelectorAll('.strat-btn').forEach(btn => {
-          btn.classList.remove('active-trend', 'active-scalp', 'active-sniper', 'active-lsob');
+          btn.classList.remove('active-trend', 'active-scalp', 'active-sniper', 'active-lsob', 'active-auto');
           if (btn.dataset.strat === strat) btn.classList.add('active-' + strat);
         });
       }
-      // Update AUTO button (positioned separately in top-right corner)
-      const card = document.querySelector(`.sym-card[data-symbol="${symbol}"]`);
-      if (card) {
-        const autoBtn = card.querySelector('.auto-btn');
-        if (autoBtn) autoBtn.classList.toggle('active-auto', strat === 'auto');
-      }
+      if (strat === 'auto') anyAuto = true;
     }
+    // Sync Agent Mode button with actual strategy state
+    _agentMode = anyAuto;
+    _setAgentModeUI(anyAuto);
+  }
+
+  function _setAgentModeUI(active) {
+    const btn = document.getElementById('agent-mode-btn');
+    if (!btn) return;
+    btn.classList.toggle('active', active);
+    btn.textContent = active ? '⚡ Agent Mode — ON' : '⚡ Agent Mode — OFF';
+  }
+
+  async function toggleAgentMode() {
+    const btn    = document.getElementById('agent-mode-btn');
+    const enable = !_agentMode;
+    btn.disabled = true;
+    btn.textContent = enable ? '⚡ Enabling...' : '⚡ Disabling...';
+    try {
+      const res  = await fetch('/api/agent_mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: enable }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        _agentMode = enable;
+        _setAgentModeUI(enable);
+        // Reload strategies so per-symbol buttons also reflect new state
+        await loadStrategies();
+      } else {
+        _setAgentModeUI(_agentMode);
+        alert('Error: ' + (data.error || 'Unknown'));
+      }
+    } catch (e) {
+      _setAgentModeUI(_agentMode);
+      alert('Network error: ' + e.message);
+    }
+    btn.disabled = false;
   }
 
   async function setStrategy(symbol, strategy, event) {

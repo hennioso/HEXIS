@@ -361,6 +361,45 @@ def api_set_strategy():
     return jsonify({"ok": True, "symbol": symbol, "strategy": strat})
 
 
+@app.route("/api/agent_mode", methods=["POST"])
+def api_agent_mode():
+    """
+    Globally enable or disable Agent Mode (auto strategy selector).
+    - enable=True:  sets all symbols WITHOUT an open position to 'auto'
+    - enable=False: sets all symbols currently on 'auto' back to 'sniper'
+    Symbols with open positions are never touched.
+    """
+    payload = request.get_json(force=True)
+    enable  = bool(payload.get("enabled", True))
+
+    # Find which symbols have an open position right now
+    open_trades   = [t for t in db.get_all_trades(limit=500) if t["status"] == "open"]
+    locked_symbols = {t["symbol"] for t in open_trades}
+
+    current = strategy_state.load()
+    changed, skipped = [], []
+
+    for symbol in config.SYMBOLS:
+        if symbol in locked_symbols:
+            skipped.append(symbol)
+            continue
+        if enable:
+            strategy_state.set_strategy(symbol, "auto")
+            changed.append(symbol)
+        else:
+            # Only revert symbols that are currently on 'auto'
+            if current.get(symbol) == "auto":
+                strategy_state.set_strategy(symbol, "sniper")
+                changed.append(symbol)
+
+    return jsonify({
+        "ok":      True,
+        "enabled": enable,
+        "changed": changed,
+        "skipped": skipped,
+    })
+
+
 @app.route("/api/sync_closed", methods=["POST"])
 def api_sync_closed():
     """Manually trigger the closed trade reconciliation (ignores the 1h rate limit)."""
