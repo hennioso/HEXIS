@@ -16,6 +16,7 @@ import threading
 import config
 import strategy_state
 import strategy_scanner
+import trade_analyst
 from exchange import BitunixClient
 from strategy import check_signal
 from strategy_scalp import check_scalp_signal, ScalpSignal
@@ -438,6 +439,16 @@ def main():
     )
     threads.append(scanner_thread)
     scanner_thread.start()
+
+    # Start the AI Trade Analyst (analyzes performance and auto-adjusts parameters)
+    analyst_thread = threading.Thread(
+        target=trade_analyst.run_analysis_loop,
+        args=(stop_event,),
+        name="TradeAnalyst",
+        daemon=True,
+    )
+    threads.append(analyst_thread)
+    analyst_thread.start()
 
     # Start per-symbol threads for non-AUTO strategies
     # (AUTO symbols are skipped inside symbol_loop; the scanner handles them)
