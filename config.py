@@ -70,3 +70,14 @@ LSOB_SCAN_DEPTH  = int(os.getenv("LSOB_SCAN_DEPTH", "25")) # how far back to sca
 
 # ---- Bot Behaviour ---------------------------------------------------------
 LOOP_INTERVAL_SECONDS = 15  # How often the bot checks prices (seconds)
+
+# ---- Telegram Notifications ------------------------------------------------
+# Optional – leave empty to disable. See notifications.py for setup instructions.
+TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN",   "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+
+# ---- Circuit Breakers ------------------------------------------------------
+# Pause ALL trading when today's realized PnL drops below this value (UTC day).
+DAILY_LOSS_LIMIT_USDT     = float(os.getenv("DAILY_LOSS_LIMIT_USDT",     "-30.0"))
+# Auto-disable a strategy after this many consecutive SL hits.
+MAX_CONSECUTIVE_LOSSES    = int(os.getenv("MAX_CONSECUTIVE_LOSSES",    "4"))

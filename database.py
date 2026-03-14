@@ -313,3 +313,120 @@ def get_daily_pnl() -> list[dict]:
                ORDER BY day ASC"""
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def get_today_pnl() -> float:
+    """Sum of realized PnL for today (UTC date)."""
+    with _connect() as conn:
+        row = conn.execute(
+            """SELECT COALESCE(SUM(pnl_usdt), 0)
+               FROM trades
+               WHERE status != 'open'
+                 AND pnl_usdt IS NOT NULL
+                 AND DATE(exit_time) = DATE('now')"""
+        ).fetchone()
+        return float(row[0])
+
+
+def get_equity_curve() -> list[dict]:
+    """
+    Returns cumulative PnL over time — one row per closed trade,
+    sorted by exit_time ascending. Used for the equity-curve chart.
+    """
+    with _connect() as conn:
+        rows = conn.execute(
+            """SELECT exit_time, pnl_usdt, symbol, direction, strategy
+               FROM trades
+               WHERE status != 'open' AND pnl_usdt IS NOT NULL
+               ORDER BY exit_time ASC"""
+        ).fetchall()
+        result = []
+        running = 0.0
+        for r in rows:
+            running += r["pnl_usdt"]
+            result.append({
+                "time":      r["exit_time"],
+                "pnl":       round(r["pnl_usdt"], 4),
+                "cumulative": round(running, 4),
+                "symbol":    r["symbol"],
+                "direction": r["direction"],
+                "strategy":  r["strategy"],
+            })
+        return result
+
+
+def get_analytics() -> dict:
+    """
+    Per-strategy and per-symbol breakdown + drawdown metrics.
+    """
+    with _connect() as conn:
+        closed = conn.execute(
+            """SELECT symbol, direction, strategy, pnl_usdt, exit_time
+               FROM trades
+               WHERE status != 'open' AND pnl_usdt IS NOT NULL
+               ORDER BY exit_time ASC"""
+        ).fetchall()
+
+        if not closed:
+            return {"by_strategy": [], "by_symbol": [], "drawdown": {}}
+
+        # ---- Per-strategy ----
+        strat_data: dict[str, list] = {}
+        for r in closed:
+            key = r["strategy"] or "unknown"
+            strat_data.setdefault(key, []).append(r["pnl_usdt"])
+
+        by_strategy = []
+        for strat, pnls in sorted(strat_data.items()):
+            wins   = [p for p in pnls if p > 0]
+            losses = [p for p in pnls if p <= 0]
+            by_strategy.append({
+                "strategy":    strat,
+                "trades":      len(pnls),
+                "win_rate":    round(len(wins) / len(pnls) * 100, 1),
+                "total_pnl":   round(sum(pnls), 2),
+                "avg_pnl":     round(sum(pnls) / len(pnls), 2),
+                "avg_win":     round(sum(wins)   / len(wins),   2) if wins   else 0,
+                "avg_loss":    round(sum(losses)  / len(losses), 2) if losses else 0,
+            })
+
+        # ---- Per-symbol ----
+        sym_data: dict[str, list] = {}
+        for r in closed:
+            sym_data.setdefault(r["symbol"], []).append(r["pnl_usdt"])
+
+        by_symbol = []
+        for sym, pnls in sorted(sym_data.items()):
+            wins = [p for p in pnls if p > 0]
+            by_symbol.append({
+                "symbol":    sym,
+                "trades":    len(pnls),
+                "win_rate":  round(len(wins) / len(pnls) * 100, 1),
+                "total_pnl": round(sum(pnls), 2),
+                "avg_pnl":   round(sum(pnls) / len(pnls), 2),
+            })
+
+        # ---- Max Drawdown ----
+        pnls_list = [r["pnl_usdt"] for r in closed]
+        peak = 0.0
+        max_dd = 0.0
+        running = 0.0
+        for p in pnls_list:
+            running += p
+            if running > peak:
+                peak = running
+            dd = peak - running
+            if dd > max_dd:
+                max_dd = dd
+
+        total_pnl = sum(pnls_list)
+        wins_all  = [p for p in pnls_list if p > 0]
+
+        return {
+            "by_strategy": by_strategy,
+            "by_symbol":   by_symbol,
+            "drawdown": {
+                "max_drawdown_usdt": round(max_dd, 2),
+                "total_pnl":        round(total_pnl, 2),
+            },
+        }

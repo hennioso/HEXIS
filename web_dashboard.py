@@ -11,11 +11,18 @@ from flask import Flask, render_template, jsonify, request
 import database as db
 import config
 import strategy_state
+import circuit_breaker
 from exchange import BitunixClient
 from indicators import klines_to_df, add_indicators
 
 app = Flask(__name__)
 _client = BitunixClient(config.API_KEY, config.SECRET_KEY)
+
+# Circuit breakers for the dashboard process
+circuit_breaker.init(
+    daily_limit_usdt=config.DAILY_LOSS_LIMIT_USDT,
+    max_consecutive_losses=config.MAX_CONSECUTIVE_LOSSES,
+)
 
 _last_sync: float = 0.0
 _SYNC_INTERVAL: float = 10.0  # seconds between open-position syncs
@@ -445,6 +452,56 @@ def api_close_position():
 
         return jsonify({"ok": True, "order": order_result, "exit_price": exit_price})
 
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/equity")
+def api_equity():
+    """Equity curve: cumulative PnL over all closed trades."""
+    return jsonify(db.get_equity_curve())
+
+
+@app.route("/api/analytics")
+def api_analytics():
+    """Per-strategy and per-symbol breakdown + drawdown metrics."""
+    return jsonify(db.get_analytics())
+
+
+@app.route("/api/circuit_breaker")
+def api_circuit_breaker_status():
+    """Current circuit breaker state."""
+    return jsonify(circuit_breaker.get_status())
+
+
+@app.route("/api/circuit_breaker/reset", methods=["POST"])
+def api_circuit_breaker_reset():
+    """Reset circuit breakers (optionally a specific strategy)."""
+    payload  = request.get_json(force=True) or {}
+    strategy = payload.get("strategy")   # None = reset everything
+    circuit_breaker.reset(strategy)
+    return jsonify({"ok": True, "reset": strategy or "all"})
+
+
+@app.route("/api/backtest")
+def api_backtest():
+    """
+    Quick backtest for trend/scalp strategies.
+    Query params: symbol (default BTCUSDT), strategy (trend|scalp), days (default 7)
+    """
+    symbol   = request.args.get("symbol",   config.SYMBOL).upper()
+    strategy = request.args.get("strategy", "trend").lower()
+    days     = int(request.args.get("days",  "7"))
+
+    if strategy not in ("trend", "scalp"):
+        return jsonify({"error": "strategy must be 'trend' or 'scalp'"}), 400
+    if days < 1 or days > 30:
+        return jsonify({"error": "days must be 1–30"}), 400
+
+    try:
+        from backtest import run_backtest_api
+        result = run_backtest_api(symbol, strategy, days)
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

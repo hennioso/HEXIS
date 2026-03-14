@@ -147,6 +147,142 @@ def run_backtest(symbol: str, strategy: str, days: int = 7):
     print()
 
 
+def run_backtest_api(symbol: str, strategy: str, days: int = 7) -> dict:
+    """
+    Run the backtest and return a dict instead of printing.
+    Used by the web dashboard /api/backtest endpoint.
+    """
+    client = BitunixClient(config.API_KEY, config.SECRET_KEY)
+
+    limit_5m  = min(days * 288, 1000)
+    klines_5m = client.get_klines(symbol, "5m", limit=limit_5m)
+
+    if len(klines_5m) < 60:
+        return {"error": "Not enough data (need at least 60 candles)."}
+
+    klines_15m = []
+    if strategy == "trend":
+        limit_15m  = min(days * 96, 500)
+        klines_15m = client.get_klines(symbol, "15m", limit=limit_15m)
+        if len(klines_15m) < 30:
+            return {"error": "Not enough 15m data for trend strategy."}
+
+    sl_pct = config.STOP_LOSS_PCT if strategy == "trend" else config.SCALP_STOP_LOSS_PCT
+    tp_pct = config.TAKE_PROFIT_PCT if strategy == "trend" else config.SCALP_TAKE_PROFIT_PCT
+
+    rm = RiskManager(
+        risk_per_trade=config.RISK_PER_TRADE,
+        stop_loss_pct=sl_pct,
+        take_profit_pct=tp_pct,
+        leverage=config.LEVERAGE,
+        max_margin_usdt=99999,
+        max_margin_trades=99999,
+    )
+
+    balance = 1000.0
+    trades  = []
+    in_trade = False
+    entry_price = tp_price = sl_price = 0.0
+    direction = ""
+    equity_curve = [{"candle": 0, "balance": balance}]
+
+    for i in range(50, len(klines_5m)):
+        candle = klines_5m[i]
+        high   = float(candle.get("high",  candle.get("h", 0)))
+        low    = float(candle.get("low",   candle.get("l", 0)))
+
+        if in_trade:
+            if direction == "long":
+                if high >= tp_price:
+                    pnl_pct = (tp_price - entry_price) / entry_price * config.LEVERAGE
+                    balance *= (1 + pnl_pct * config.RISK_PER_TRADE)
+                    trades.append({"result": "tp_hit", "pnl_pct": round(pnl_pct * 100, 3)})
+                    equity_curve.append({"candle": i, "balance": round(balance, 2)})
+                    in_trade = False
+                elif low <= sl_price:
+                    pnl_pct = (sl_price - entry_price) / entry_price * config.LEVERAGE
+                    balance *= (1 + pnl_pct * config.RISK_PER_TRADE)
+                    trades.append({"result": "sl_hit", "pnl_pct": round(pnl_pct * 100, 3)})
+                    equity_curve.append({"candle": i, "balance": round(balance, 2)})
+                    in_trade = False
+            else:
+                if low <= tp_price:
+                    pnl_pct = (entry_price - tp_price) / entry_price * config.LEVERAGE
+                    balance *= (1 + pnl_pct * config.RISK_PER_TRADE)
+                    trades.append({"result": "tp_hit", "pnl_pct": round(pnl_pct * 100, 3)})
+                    equity_curve.append({"candle": i, "balance": round(balance, 2)})
+                    in_trade = False
+                elif high >= sl_price:
+                    pnl_pct = (entry_price - sl_price) / entry_price * config.LEVERAGE
+                    balance *= (1 + pnl_pct * config.RISK_PER_TRADE)
+                    trades.append({"result": "sl_hit", "pnl_pct": round(pnl_pct * 100, 3)})
+                    equity_curve.append({"candle": i, "balance": round(balance, 2)})
+                    in_trade = False
+            continue
+
+        window_5m = klines_5m[:i + 1]
+        sig = None
+        if strategy == "scalp":
+            sig = check_scalp_signal(
+                klines_5m=window_5m,
+                bb_period=config.SCALP_BB_PERIOD,
+                bb_std=config.SCALP_BB_STD,
+                rsi_period=config.SCALP_RSI_PERIOD,
+                vol_period=config.SCALP_VOL_PERIOD,
+            )
+        else:
+            window_15m = klines_15m[:max(1, i // 3 + 1)]
+            sig = check_signal(
+                klines_5m=window_5m,
+                klines_15m=window_15m,
+                fast_ema=config.EMA_FAST,
+                slow_ema=config.EMA_SLOW,
+                rsi_period=config.RSI_PERIOD,
+            )
+
+        if sig:
+            params = rm.calculate(sig.direction, sig.price, balance, len(trades))
+            if params:
+                entry_price = float(params.entry_price)
+                tp_price    = float(params.tp_price)
+                sl_price    = float(params.sl_price)
+                direction   = sig.direction
+                in_trade    = True
+
+    if not trades:
+        return {
+            "symbol": symbol, "strategy": strategy, "days": days,
+            "trades": 0, "message": "No trades generated in this period.",
+        }
+
+    wins   = [t for t in trades if t["result"] == "tp_hit"]
+    losses = [t for t in trades if t["result"] == "sl_hit"]
+    win_rate      = round(len(wins) / len(trades) * 100, 1)
+    avg_win       = round(sum(t["pnl_pct"] for t in wins)   / len(wins),   2) if wins   else 0
+    avg_loss      = round(sum(t["pnl_pct"] for t in losses) / len(losses), 2) if losses else 0
+    total_pnl_pct = round(sum(t["pnl_pct"] for t in trades), 2)
+    gross_win     = sum(t["pnl_pct"] for t in wins)
+    gross_loss    = abs(sum(t["pnl_pct"] for t in losses)) or 1
+    profit_factor = round(gross_win / gross_loss, 2)
+
+    return {
+        "symbol":        symbol,
+        "strategy":      strategy,
+        "days":          days,
+        "candles":       len(klines_5m),
+        "trades":        len(trades),
+        "wins":          len(wins),
+        "losses":        len(losses),
+        "win_rate":      win_rate,
+        "avg_win_pct":   avg_win,
+        "avg_loss_pct":  avg_loss,
+        "total_pnl_pct": total_pnl_pct,
+        "profit_factor": profit_factor,
+        "final_balance": round(balance, 2),
+        "equity_curve":  equity_curve,
+    }
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="HEXIS Backtester")
     parser.add_argument("--symbol",   default="BTCUSDT",
