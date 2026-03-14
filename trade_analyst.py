@@ -33,7 +33,7 @@ import strategy_state
 log = logging.getLogger("TradeAnalyst")
 
 # ---- Configuration -----------------------------------------------------------
-ANALYSIS_INTERVAL_MINUTES = 60   # How often to run (minutes)
+ANALYSIS_INTERVAL_MINUTES = 240  # How often to run (minutes)
 STARTUP_DELAY_MINUTES     = 30   # Wait before first analysis after bot start
 MIN_CLOSED_TRADES         = 5    # Minimum closed trades required to analyze
 SCORE_BOUNDS              = (5, 9)
