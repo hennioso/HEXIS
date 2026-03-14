@@ -15,12 +15,12 @@ import threading
 
 import config
 import strategy_state
+import strategy_scanner
 from exchange import BitunixClient
 from strategy import check_signal
 from strategy_scalp import check_scalp_signal, ScalpSignal
 from strategy_sniper import check_sniper_signal
 from strategy_lsob import check_lsob_signal
-from strategy_selector import select_strategy
 from strategy import Signal
 from risk_manager import RiskManager
 from trader import Trader
@@ -63,18 +63,12 @@ def symbol_loop(
                 )
                 _last_strategy = strategy
 
-            klines_5m = client.get_klines(symbol, config.FAST_TF, limit=config.KLINE_LIMIT)
-
-            # AUTO: let the selector agent pick the best strategy this tick
+            # AUTO: handled entirely by the global Agent Scanner thread
             if strategy == "auto":
-                klines_15m_auto = client.get_klines(symbol, "15m", limit=100)
-                chosen, scores = select_strategy(
-                    symbol=symbol,
-                    klines_5m=klines_5m,
-                    klines_15m=klines_15m_auto,
-                    current_strategy=_last_strategy if _last_strategy != "auto" else "sniper",
-                )
-                strategy = chosen   # execute as chosen strategy this tick
+                stop_event.wait(config.LOOP_INTERVAL_SECONDS)
+                continue
+
+            klines_5m = client.get_klines(symbol, config.FAST_TF, limit=config.KLINE_LIMIT)
 
             has_position = trader.has_open_position()
 
@@ -187,6 +181,189 @@ def symbol_loop(
         stop_event.wait(config.LOOP_INTERVAL_SECONDS)
 
 
+def agent_scanner_loop(
+    client: BitunixClient,
+    risk_managers: dict,
+    stop_event: threading.Event,
+):
+    """
+    Global scanner for all symbols currently in AUTO mode.
+
+    Every tick:
+      1. Reads which symbols are currently set to "auto".
+      2. Monitors any open positions on those symbols (incl. SNIPER partial TPs).
+      3. Fetches klines for all AUTO symbols without an open position.
+      4. Scores all (symbol × strategy) combinations in one pass.
+      5. Opens an order for the top-ranked opportunity if its score >= MIN_OPEN_SCORE.
+    """
+    log = logging.getLogger("AgentScanner")
+
+    # Create one Trader per symbol (covers any symbol that may become "auto" at runtime)
+    traders = {
+        sym: Trader(client=client, risk_manager=risk_managers["trend"], symbol=sym)
+        for sym in config.SYMBOLS
+    }
+    log.info("Agent Scanner started — waiting for AUTO symbols.")
+
+    while not stop_event.is_set():
+        try:
+            # ---- 1. Determine which symbols are currently in AUTO mode ----
+            auto_symbols = [
+                sym for sym in config.SYMBOLS
+                if strategy_state.get_strategy(sym) == "auto"
+            ]
+            if not auto_symbols:
+                stop_event.wait(config.LOOP_INTERVAL_SECONDS)
+                continue
+
+            # ---- 2. Monitor open positions ----
+            for sym in auto_symbols:
+                trader = traders[sym]
+                if trader.has_open_position():
+                    pos = trader.current_position
+                    log.info(
+                        f"{sym} | Position open | Side: {pos.get('side')} | "
+                        f"Qty: {pos.get('qty')} | uPNL: {pos.get('unrealizedPNL', 'N/A')}"
+                    )
+                    trader.monitor_sniper_tps()
+
+            # ---- 3. Find candidates (AUTO + no open position) ----
+            candidates = [
+                sym for sym in auto_symbols
+                if not traders[sym].has_open_position()
+            ]
+            if not candidates:
+                log.debug("All AUTO symbols have open positions — skipping scan.")
+                stop_event.wait(config.LOOP_INTERVAL_SECONDS)
+                continue
+
+            # ---- 4. Fetch klines for all candidates ----
+            klines_map: dict[str, dict] = {}
+            for sym in candidates:
+                klines_map[sym] = {
+                    "5m":  client.get_klines(sym, "5m",  limit=120),
+                    "15m": client.get_klines(sym, "15m", limit=120),
+                }
+
+            # ---- 5. Score all (symbol × strategy) combinations ----
+            opps = strategy_scanner.scan_opportunities(candidates, klines_map)
+
+            # Log the top 5 scored setups for visibility
+            log.info(
+                f"Agent scan complete | {len(candidates)} symbols × 4 strategies | "
+                f"Top score: {opps[0].score if opps else 0} "
+                f"(threshold: {strategy_scanner.MIN_OPEN_SCORE})"
+            )
+            for opp in opps[:5]:
+                log.info(
+                    f"  {opp.symbol:<10} {opp.strategy.upper():<7} score={opp.score:2d} | "
+                    + ", ".join(opp.reasons[:2])
+                )
+
+            # ---- 6. Execute the best opportunity if above threshold ----
+            best = opps[0] if opps else None
+            if not best or best.score < strategy_scanner.MIN_OPEN_SCORE:
+                if best:
+                    log.debug(
+                        f"Best: {best.symbol} {best.strategy.upper()} score={best.score} "
+                        f"— below threshold {strategy_scanner.MIN_OPEN_SCORE}, no order."
+                    )
+                stop_event.wait(config.LOOP_INTERVAL_SECONDS)
+                continue
+
+            log.info(
+                f"AGENT ENTRY → {best.symbol} {best.strategy.upper()} "
+                f"score={best.score} | {', '.join(best.reasons[:3])}"
+            )
+
+            trader = traders[best.symbol]
+            klines_5m  = klines_map[best.symbol]["5m"]
+            klines_15m = klines_map[best.symbol]["15m"]
+
+            if best.strategy == "sniper":
+                trader.rm = risk_managers["sniper"]
+                klines_sniper = client.get_klines(
+                    best.symbol, config.SNIPER_TF, limit=config.SNIPER_KLINE_LIMIT
+                )
+                sniper = check_sniper_signal(
+                    klines_5m=klines_sniper,
+                    lookback=config.FIB_LOOKBACK,
+                    klines_15m=klines_15m,
+                )
+                if sniper:
+                    trader.open_sniper_position(sniper)
+                else:
+                    log.info(
+                        f"AGENT: {best.symbol} SNIPER scored {best.score} "
+                        f"but signal no longer active — skipping."
+                    )
+
+            elif best.strategy == "lsob":
+                trader.rm = risk_managers["lsob"]
+                klines_lsob = client.get_klines(
+                    best.symbol, config.LSOB_TF, limit=config.LSOB_KLINE_LIMIT
+                )
+                lsob = check_lsob_signal(
+                    klines=klines_lsob,
+                    lookback=config.LSOB_LOOKBACK,
+                    scan_depth=config.LSOB_SCAN_DEPTH,
+                )
+                if lsob:
+                    trader.open_lsob_position(lsob)
+                else:
+                    log.info(
+                        f"AGENT: {best.symbol} LSOB scored {best.score} "
+                        f"but signal no longer active — skipping."
+                    )
+
+            elif best.strategy == "scalp":
+                trader.rm = risk_managers["scalp"]
+                scalp = check_scalp_signal(
+                    klines_5m=klines_5m,
+                    bb_period=config.SCALP_BB_PERIOD,
+                    bb_std=config.SCALP_BB_STD,
+                    rsi_period=config.SCALP_RSI_PERIOD,
+                    vol_period=config.SCALP_VOL_PERIOD,
+                )
+                if scalp:
+                    signal = Signal(
+                        direction=scalp.direction,
+                        price=scalp.price,
+                        rsi_5m=scalp.rsi_7,
+                        ema_fast_5m=0,
+                        ema_slow_5m=0,
+                        trend_15m="scalp",
+                    )
+                    trader.open_position(signal)
+                else:
+                    log.info(
+                        f"AGENT: {best.symbol} SCALP scored {best.score} "
+                        f"but signal no longer active — skipping."
+                    )
+
+            else:  # trend
+                trader.rm = risk_managers["trend"]
+                signal = check_signal(
+                    klines_5m=klines_5m,
+                    klines_15m=klines_15m,
+                    fast_ema=config.EMA_FAST,
+                    slow_ema=config.EMA_SLOW,
+                    rsi_period=config.RSI_PERIOD,
+                )
+                if signal:
+                    trader.open_position(signal)
+                else:
+                    log.info(
+                        f"AGENT: {best.symbol} TREND scored {best.score} "
+                        f"but signal no longer active — skipping."
+                    )
+
+        except Exception as e:
+            log.error(f"Agent scanner error: {e}", exc_info=True)
+
+        stop_event.wait(config.LOOP_INTERVAL_SECONDS)
+
+
 def main():
     logger.info("=" * 60)
     logger.info("  HEXIS – Autonomous Crypto Agent")
@@ -244,10 +421,30 @@ def main():
         max_margin_pct=config.MAX_MARGIN_PCT,
     )
 
+    # Shared risk manager map used by the Agent Scanner
+    risk_managers = {
+        "trend":  risk_manager_trend,
+        "scalp":  risk_manager_scalp,
+        "sniper": risk_manager_fib,
+        "lsob":   risk_manager_fib,
+    }
+
+    # Start the global Agent Scanner (handles all AUTO symbols centrally)
+    scanner_thread = threading.Thread(
+        target=agent_scanner_loop,
+        args=(client, risk_managers, stop_event),
+        name="AgentScanner",
+        daemon=True,
+    )
+    threads.append(scanner_thread)
+    scanner_thread.start()
+
+    # Start per-symbol threads for non-AUTO strategies
+    # (AUTO symbols are skipped inside symbol_loop; the scanner handles them)
     for symbol, strategy in zip(config.SYMBOLS, config.STRATEGIES):
         if strategy == "scalp":
             rm = risk_manager_scalp
-        elif strategy == "fib":
+        elif strategy in ("fib", "sniper"):
             rm = risk_manager_fib
         else:
             rm = risk_manager_trend
