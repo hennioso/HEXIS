@@ -187,38 +187,28 @@ def _sync_closed_trades(force: bool = False):
         for trade in all_trades:
             if trade["symbol"] != symbol or trade["direction"] != direction:
                 continue
+            # Only consider trades that are still OPEN in the DB.
+            # Already-closed trades are never overwritten by the sync —
+            # their exit price and PnL are considered final.
+            if trade.get("status") != "open":
+                continue
             db_entry = float(trade.get("entry_price") or 0)
             if not db_entry or abs(avg_open - db_entry) / db_entry > 0.005:
                 continue
 
-            # ── Match found ──────────────────────────────────────────────────
-            status  = trade.get("status", "open")
-            db_exit = float(trade.get("exit_price") or 0)
-            db_pnl  = float(trade.get("pnl_usdt") or 0)
-
-            if status == "open":
-                # Skip if the position is still live on the exchange.
-                # Partial-TP events (SNIPER TP1/TP2) produce history entries
-                # but the remaining qty is still open — we must NOT close those.
-                exchange_side = "BUY" if direction == "long" else "SELL"
-                if (symbol, exchange_side) in live_keys:
-                    break  # still open, leave DB as-is
-                db.correct_closed_trade(trade["trade_id"], avg_close, ex_pnl, close_time)
-                log.info(
-                    f"[AUTO-CLOSE] {symbol} {direction} | "
-                    f"exit={avg_close:.4f} | pnl={ex_pnl:+.4f} USDT"
-                )
-                closed_now += 1
-
-            elif db_exit and abs(avg_close - db_exit) / max(db_exit, 0.0001) > 0.005:
-                log.info(
-                    f"[PRICE-FIX]  {symbol} {direction} | "
-                    f"exit: DB={db_exit:.4f} → exchange={avg_close:.4f} | "
-                    f"pnl: DB={db_pnl:+.4f} → exchange={ex_pnl:+.4f} USDT"
-                )
-                db.correct_closed_trade(trade["trade_id"], avg_close, ex_pnl, close_time)
-                corrected += 1
-
+            # ── Match found: open DB trade closed on exchange ─────────────────
+            # Skip if the position is still live on the exchange.
+            # Partial-TP events (SNIPER TP1/TP2) produce history entries
+            # but the remaining qty is still open — we must NOT close those.
+            exchange_side = "BUY" if direction == "long" else "SELL"
+            if (symbol, exchange_side) in live_keys:
+                break  # still open, leave DB as-is
+            db.correct_closed_trade(trade["trade_id"], avg_close, ex_pnl, close_time)
+            log.info(
+                f"[AUTO-CLOSE] {symbol} {direction} | "
+                f"exit={avg_close:.4f} | pnl={ex_pnl:+.4f} USDT"
+            )
+            closed_now += 1
             break  # stop searching after first match for this exchange position
 
     log.info(
