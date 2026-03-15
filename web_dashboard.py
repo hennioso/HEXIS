@@ -471,7 +471,11 @@ def api_analytics():
 @app.route("/api/circuit_breaker")
 def api_circuit_breaker_status():
     """Current circuit breaker state."""
-    return jsonify(circuit_breaker.get_status())
+    status = circuit_breaker.get_status()
+    ok, reason = circuit_breaker.is_trading_allowed()
+    status["trading_allowed"] = ok
+    status["block_reason"]    = reason
+    return jsonify(status)
 
 
 @app.route("/api/circuit_breaker/reset", methods=["POST"])
