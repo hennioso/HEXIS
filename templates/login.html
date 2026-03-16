@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HEXIS — Login</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:     #0d1117;
+      --card:   #161b22;
+      --border: #30363d;
+      --text:   #e6edf3;
+      --muted:  #8b949e;
+      --green:  #3fb950;
+      --red:    #f85149;
+      --accent: #58a6ff;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .login-wrap {
+      width: 100%;
+      max-width: 380px;
+      padding: 20px;
+    }
+
+    .logo {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .logo-dot {
+      display: inline-block;
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--green);
+      margin-right: 8px;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+    .logo h1 {
+      display: inline-flex;
+      align-items: center;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+    }
+    .logo p {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 6px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 32px 28px;
+    }
+
+    .field { margin-bottom: 18px; }
+    .field label {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+    .field input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-size: 15px;
+      transition: border-color .15s;
+    }
+    .field input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .error-box {
+      background: rgba(248,81,73,0.1);
+      border: 1px solid rgba(248,81,73,0.35);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: var(--red);
+      margin-bottom: 18px;
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 11px;
+      background: var(--green);
+      color: #000;
+      font-size: 15px;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      letter-spacing: 0.03em;
+      transition: opacity .15s;
+    }
+    .submit-btn:hover { opacity: .85; }
+
+    .footer {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="logo">
+      <h1><span class="logo-dot"></span>HEXIS</h1>
+      <p>Algorithmic Trading Dashboard</p>
+    </div>
+
+    <div class="card">
+      {% if error %}
+      <div class="error-box">{{ error }}</div>
+      {% endif %}
+
+      <form method="POST">
+        <div class="field">
+          <label>Username</label>
+          <input type="text" name="username" autofocus autocomplete="username" placeholder="admin" />
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" name="password" autocomplete="current-password" placeholder="••••••••" />
+        </div>
+        <button class="submit-btn" type="submit">Sign In</button>
+      </form>
+    </div>
+
+    <div class="footer">
+      <a href="https://www.bitunix.com/register?inviteCode=vefzzy" target="_blank" rel="noopener">
+        ▶ Register on Bitunix
+      </a>
+    </div>
+  </div>
+</body>
+</html>

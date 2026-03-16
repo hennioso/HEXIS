@@ -7,7 +7,9 @@ Open:  http://localhost:5000
 import time
 import threading
 import logging
-from flask import Flask, render_template, jsonify, request, Response
+import os
+import secrets
+from flask import Flask, render_template, jsonify, request, Response, redirect, url_for, session
 import database as db
 import config
 import strategy_state
@@ -16,23 +18,39 @@ from exchange import BitunixClient
 from indicators import klines_to_df, add_indicators
 
 app = Flask(__name__)
+app.secret_key = os.getenv("FLASK_SECRET_KEY") or secrets.token_hex(32)
 
-# ---- HTTP Basic Auth -------------------------------------------------------
+# ---- Session Auth ----------------------------------------------------------
 _AUTH_ENABLED = bool(config.DASHBOARD_USER and config.DASHBOARD_PASSWORD)
+_PUBLIC_ROUTES = {"login", "static"}
 
 @app.before_request
 def check_auth():
-    """Block every request unless valid Basic Auth credentials are provided."""
+    """Redirect to login page unless the user has an active session."""
     if not _AUTH_ENABLED:
         return
-    auth = request.authorization
-    if not auth or auth.username != config.DASHBOARD_USER \
-                 or auth.password != config.DASHBOARD_PASSWORD:
-        return Response(
-            "Authentication required.",
-            401,
-            {"WWW-Authenticate": 'Basic realm="HEXIS Dashboard"'},
-        )
+    if request.endpoint in _PUBLIC_ROUTES:
+        return
+    if not session.get("logged_in"):
+        return redirect(url_for("login", next=request.path))
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    error = None
+    if request.method == "POST":
+        user = request.form.get("username", "")
+        pw   = request.form.get("password", "")
+        if user == config.DASHBOARD_USER and pw == config.DASHBOARD_PASSWORD:
+            session["logged_in"] = True
+            return redirect(request.args.get("next") or url_for("index"))
+        error = "Invalid credentials."
+    return render_template("login.html", error=error)
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
 _client = BitunixClient(config.API_KEY, config.SECRET_KEY)
 
 # Circuit breakers for the dashboard process
