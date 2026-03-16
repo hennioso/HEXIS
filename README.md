@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="static/logo.svg" alt="HEXIS Logo" width="480"/>
+</p>
+
 # HEXIS – Autonomous Crypto Agent
 
 An automated futures trading agent for the **Bitunix** exchange. Trades multiple symbols in parallel using four strategies — trend-following, scalping, Fibonacci sniper, and liquidity sweep orderblock — with a live web dashboard and an **AI Trade Analyst** that automatically tunes parameters based on performance.

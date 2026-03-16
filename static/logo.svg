@@ -1,0 +1,107 @@
+<svg width="100%" viewBox="0 0 680 560" xmlns="http://www.w3.org/2000/svg">
+
+<defs>
+  <!-- Subtle glow filter for the spark only -->
+  <filter id="glow" x="-100%" y="-100%" width="300%" height="300%">
+    <feGaussianBlur stdDeviation="3" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs>
+
+<!-- CARD 1 – Icon only (512×512 equivalent) -->
+<rect x="40" y="30" width="180" height="200" rx="12" stroke-width="1" style="fill:rgb(13, 17, 23);stroke:rgb(42, 46, 54);stroke-width:1px;"/>
+<text x="130" y="252" text-anchor="middle" font-family="ui-monospace, monospace" font-size="11" fill="rgb(136, 135, 128)">Icon</text>
+
+<polygon points="96,71 164,71 198,130 164,189 96,189 62,130" fill="none" stroke="rgb(232, 230, 223)" stroke-width="1.5"/>
+<polygon points="116,95 144,95 158,130 144,165 116,165 102,130" fill="none" stroke="rgb(232, 230, 223)" stroke-width="0.5" opacity="0.25"/>
+
+<line x1="93" y1="115" x2="93" y2="168" stroke="rgb(232, 230, 223)" stroke-width="0.75" opacity="0.35"/>
+<rect x="88" y="125" width="10" height="28" fill="none" stroke="rgb(232, 230, 223)" stroke-width="1" opacity="0.55"/>
+<line x1="111" y1="108" x2="111" y2="162" stroke="rgb(232, 230, 223)" stroke-width="0.75" opacity="0.35"/>
+<rect x="106" y="118" width="10" height="30" fill="none" stroke="rgb(232, 230, 223)" stroke-width="1" opacity="0.55"/>
+<line x1="129" y1="95" x2="129" y2="158" stroke="#3fb950" stroke-width="0.75" opacity="0.7"/>
+<rect x="124" y="100" width="10" height="35" fill="none" stroke="#3fb950" stroke-width="1.2" opacity="0.9"/>
+<line x1="147" y1="88" x2="147" y2="148" stroke="#3fb950" stroke-width="0.75" opacity="0.7"/>
+<rect x="142" y="92" width="10" height="38" fill="none" stroke="#3fb950" stroke-width="1.5" opacity="1"/>
+<polyline points="88,125 106,118 124,100 142,92" fill="none" stroke="#3fb950" stroke-width="0.8" opacity="0.45" stroke-dasharray="2 2"/>
+
+<g transform="translate(164, 71)" filter="url(#glow)">
+  <circle cx="0" cy="0" r="4" fill="none" stroke="#3fb950" stroke-width="1" opacity="0.5"/>
+  <circle cx="0" cy="0" r="3" fill="#3fb950" opacity="0.8"/>
+</g>
+
+<!-- CARD 2 – Horizontal wordmark -->
+<rect x="250" y="30" width="390" height="200" rx="12" stroke-width="1" style="fill:rgb(13, 17, 23);stroke:rgb(42, 46, 54);stroke-width:1px;"/>
+<text x="445" y="252" text-anchor="middle" font-family="ui-monospace, monospace" font-size="11" fill="rgb(136, 135, 128)">Horizontal wordmark</text>
+
+<polygon points="306,84 354,84 376,130 354,176 306,176 284,130" fill="none" stroke="rgb(232, 230, 223)" stroke-width="1.5"/>
+<polygon points="316,101 344,101 358,130 344,159 316,159 302,130" fill="none" stroke="rgb(232, 230, 223)" stroke-width="0.5" opacity="0.25"/>
+
+<line x1="305" y1="114" x2="305" y2="157" stroke="rgb(232, 230, 223)" stroke-width="0.6" opacity="0.35"/>
+<rect x="301" y="121" width="7" height="19" fill="none" stroke="rgb(232, 230, 223)" stroke-width="0.8" opacity="0.5"/>
+<line x1="317" y1="109" x2="317" y2="154" stroke="rgb(232, 230, 223)" stroke-width="0.6" opacity="0.35"/>
+<rect x="313" y="116" width="7" height="21" fill="none" stroke="rgb(232, 230, 223)" stroke-width="0.8" opacity="0.5"/>
+<line x1="329" y1="102" x2="329" y2="148" stroke="#3fb950" stroke-width="0.6" opacity="0.7"/>
+<rect x="325" y="106" width="7" height="24" fill="none" stroke="#3fb950" stroke-width="1" opacity="0.9"/>
+<line x1="341" y1="97" x2="341" y2="143" stroke="#3fb950" stroke-width="0.6" opacity="0.7"/>
+<rect x="337" y="100" width="7" height="26" fill="none" stroke="#3fb950" stroke-width="1.2" opacity="1"/>
+<polyline points="301,121 313,116 325,106 337,100" fill="none" stroke="#3fb950" stroke-width="0.7" opacity="0.4" stroke-dasharray="2 2"/>
+
+<g transform="translate(354,84)" filter="url(#glow)">
+  <circle cx="0" cy="0" r="3.5" fill="none" stroke="#3fb950" stroke-width="1" opacity="0.5"/>
+  <circle cx="0" cy="0" r="2.5" fill="#3fb950" opacity="0.8"/>
+</g>
+
+<text x="400" y="138" font-family="'IBM Plex Mono', 'Courier New', monospace" font-size="38" font-weight="500" letter-spacing="10" text-anchor="start" dominant-baseline="central" fill="rgb(232, 230, 223)">HEXIS</text>
+<text x="402" y="162" font-family="'IBM Plex Mono', 'Courier New', monospace" font-size="10" font-weight="400" letter-spacing="4" text-anchor="start" fill="rgb(136, 135, 128)">ALGORITHMIC TRADING</text>
+
+<!-- CARD 3 – Dark background preview -->
+<rect x="40" y="285" width="180" height="200" rx="12" fill="#0d1117" stroke="#2a2e36" stroke-width="1"/>
+<text fill="#888780" x="130" y="500" text-anchor="middle" font-family="ui-monospace, monospace" font-size="11">Dark bg preview</text>
+
+<polygon points="96,326 164,326 198,385 164,444 96,444 62,385" fill="none" stroke="#d0cec5" stroke-width="1.5"/>
+<polygon points="116,350 144,350 158,385 144,420 116,420 102,385" fill="none" stroke="#d0cec5" stroke-width="0.5" opacity="0.2"/>
+<line x1="93" y1="370" x2="93" y2="423" stroke="#d0cec5" stroke-width="0.75" opacity="0.3"/>
+<rect x="88" y="380" width="10" height="28" stroke="#d0cec5" fill="none" stroke-width="1" opacity="0.45"/>
+<line x1="111" y1="363" x2="111" y2="417" stroke="#d0cec5" stroke-width="0.75" opacity="0.3"/>
+<rect x="106" y="373" width="10" height="30" stroke="#d0cec5" fill="none" stroke-width="1" opacity="0.45"/>
+<line x1="129" y1="350" x2="129" y2="413" stroke="#3fb950" stroke-width="0.75" opacity="0.7"/>
+<rect x="124" y="355" width="10" height="35" fill="none" stroke="#3fb950" stroke-width="1.2" opacity="0.9"/>
+<line x1="147" y1="343" x2="147" y2="403" stroke="#3fb950" stroke-width="0.75" opacity="0.7"/>
+<rect x="142" y="347" width="10" height="38" fill="none" stroke="#3fb950" stroke-width="1.5" opacity="1"/>
+<polyline points="88,380 106,373 124,355 142,347" fill="none" stroke="#3fb950" stroke-width="0.8" opacity="0.4" stroke-dasharray="2 2"/>
+<g transform="translate(164,326)" filter="url(#glow)">
+  <circle cx="0" cy="0" r="4" fill="none" stroke="#3fb950" stroke-width="1" opacity="0.5"/>
+  <circle cx="0" cy="0" r="3" fill="#3fb950" opacity="0.8"/>
+</g>
+
+<!-- CARD 4 – Favicon / App icon / Full dark wordmark -->
+<rect x="250" y="285" width="390" height="200" rx="12" fill="#0d1117" stroke="#2a2e36" stroke-width="1"/>
+<text fill="#888780" x="445" y="500" text-anchor="middle" font-family="ui-monospace, monospace" font-size="11">Favicon · App icon · Full dark wordmark</text>
+
+<polygon points="292,349 328,349 346,385 328,421 292,421 274,385" fill="none" stroke="#d0cec5" stroke-width="1.2"/>
+<rect x="296" y="365" width="6" height="16" fill="none" stroke="#3fb950" stroke-width="1.1" opacity="0.9"/>
+<rect x="306" y="359" width="6" height="22" fill="none" stroke="#3fb950" stroke-width="1.4" opacity="1"/>
+<circle cx="328" cy="349" r="3.5" fill="#3fb950"/>
+
+<polygon points="372,349 408,349 426,385 408,421 372,421 354,385" fill="none" stroke="#d0cec5" stroke-width="1.4"/>
+<polygon points="381,362 399,362 408,385 399,408 381,408 372,385" fill="none" stroke="#d0cec5" stroke-width="0.5" opacity="0.2"/>
+<line x1="369" y1="372" x2="369" y2="410" stroke="#d0cec5" stroke-width="0.6" opacity="0.3"/>
+<rect x="365" y="379" width="7" height="14" stroke="#d0cec5" fill="none" stroke-width="0.8" opacity="0.4"/>
+<line x1="380" y1="367" x2="380" y2="406" stroke="#3fb950" stroke-width="0.6" opacity="0.7"/>
+<rect x="376" y="371" width="7" height="18" fill="none" stroke="#3fb950" stroke-width="1" opacity="0.9"/>
+<line x1="392" y1="362" x2="392" y2="401" stroke="#3fb950" stroke-width="0.6" opacity="0.7"/>
+<rect x="388" y="365" width="7" height="20" fill="none" stroke="#3fb950" stroke-width="1.2" opacity="1"/>
+<g transform="translate(408,349)" filter="url(#glow)">
+  <circle cx="0" cy="0" r="3" fill="none" stroke="#3fb950" stroke-width="1"/>
+  <circle cx="0" cy="0" r="2" fill="#3fb950"/>
+</g>
+
+<polygon points="455,366 479,366 491,385 479,404 455,404 443,385" fill="none" stroke="#d0cec5" stroke-width="1.2"/>
+<rect x="448" y="379" width="6" height="12" stroke="#d0cec5" fill="none" stroke-width="0.7" opacity="0.4"/>
+<rect x="457" y="376" width="6" height="15" fill="none" stroke="#3fb950" stroke-width="1" opacity="0.9"/>
+<rect x="467" y="372" width="5" height="18" fill="none" stroke="#3fb950" stroke-width="1.1" opacity="1"/>
+<circle cx="479" cy="366" r="2.5" fill="#3fb950"/>
+<text fill="#d0cec5" x="500" y="389" font-family="'IBM Plex Mono','Courier New',monospace" font-size="22" font-weight="500" letter-spacing="6" dominant-baseline="central">HEXIS</text>
+
+</svg>

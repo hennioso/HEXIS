@@ -134,8 +134,31 @@
 <body>
   <div class="login-wrap">
     <div class="logo">
+      <svg viewBox="0 0 136 136" width="72" height="72" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto 12px">
+        <defs>
+          <filter id="lglow" x="-100%" y="-100%" width="300%" height="300%">
+            <feGaussianBlur stdDeviation="2.5" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <polygon points="68,8 114,34 114,102 68,128 22,102 22,34" fill="none" stroke="#e8e6df" stroke-width="2"/>
+        <polygon points="68,30 94,45 94,91 68,106 42,91 42,45" fill="none" stroke="#e8e6df" stroke-width="0.8" opacity="0.2"/>
+        <line x1="44" y1="60" x2="44" y2="100" stroke="#e8e6df" stroke-width="1" opacity="0.3"/>
+        <rect x="40" y="68" width="9" height="22" fill="none" stroke="#e8e6df" stroke-width="1" opacity="0.45"/>
+        <line x1="61" y1="53" x2="61" y2="95" stroke="#e8e6df" stroke-width="1" opacity="0.3"/>
+        <rect x="57" y="61" width="9" height="24" fill="none" stroke="#e8e6df" stroke-width="1" opacity="0.45"/>
+        <line x1="78" y1="44" x2="78" y2="90" stroke="#3fb950" stroke-width="1" opacity="0.8"/>
+        <rect x="74" y="50" width="9" height="28" fill="none" stroke="#3fb950" stroke-width="1.4" opacity="0.95"/>
+        <line x1="95" y1="37" x2="95" y2="82" stroke="#3fb950" stroke-width="1" opacity="0.8"/>
+        <rect x="91" y="42" width="9" height="30" fill="none" stroke="#3fb950" stroke-width="1.8" opacity="1"/>
+        <polyline points="40,68 57,61 74,50 91,42" fill="none" stroke="#3fb950" stroke-width="1" opacity="0.4" stroke-dasharray="2 2"/>
+        <g transform="translate(114,34)" filter="url(#lglow)">
+          <circle cx="0" cy="0" r="5" fill="none" stroke="#3fb950" stroke-width="1.2" opacity="0.5"/>
+          <circle cx="0" cy="0" r="3.5" fill="#3fb950" opacity="0.9"/>
+        </g>
+      </svg>
       <h1><span class="logo-dot"></span>HEXIS</h1>
-      <p>Algorithmic Trading Dashboard</p>
+      <p>Algorithmic Trading Agent</p>
     </div>
 
     <div class="card">
