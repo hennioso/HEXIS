@@ -39,9 +39,10 @@ log = logging.getLogger("circuit")
 
 class _DailyLossGuard:
     def __init__(self, limit_usdt: float):
-        self.limit_usdt = limit_usdt
-        self._tripped   = False
-        self._lock      = threading.Lock()
+        self.limit_usdt      = limit_usdt
+        self._tripped        = False
+        self._manually_reset = False   # skip DB re-check until next UTC day
+        self._lock           = threading.Lock()
         self._last_date: date | None = None
 
     def _reset_if_new_day(self):
@@ -49,8 +50,9 @@ class _DailyLossGuard:
         if self._last_date != today:
             if self._tripped:
                 log.info("DailyLossGuard: new UTC day — resetting.")
-            self._tripped   = False
-            self._last_date = today
+            self._tripped        = False
+            self._manually_reset = False
+            self._last_date      = today
 
     def is_allowed(self) -> tuple[bool, str]:
         with self._lock:
@@ -60,6 +62,9 @@ class _DailyLossGuard:
                     f"Daily loss limit {self.limit_usdt:.0f} USDT reached — "
                     f"trading paused until midnight UTC."
                 )
+            # After a manual reset, skip the DB check for the rest of this day
+            if self._manually_reset:
+                return True, ""
             today_pnl = db.get_today_pnl()
             if today_pnl <= self.limit_usdt:
                 self._tripped = True
@@ -74,8 +79,9 @@ class _DailyLossGuard:
 
     def reset(self):
         with self._lock:
-            self._tripped = False
-            log.info("DailyLossGuard manually reset.")
+            self._tripped        = False
+            self._manually_reset = True   # prevent immediate re-trip from DB check
+            log.info("DailyLossGuard manually reset — DB check suppressed for today.")
 
     def status(self) -> dict:
         with self._lock:
