@@ -7,7 +7,7 @@ Open:  http://localhost:5000
 import time
 import threading
 import logging
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, Response
 import database as db
 import config
 import strategy_state
@@ -16,6 +16,23 @@ from exchange import BitunixClient
 from indicators import klines_to_df, add_indicators
 
 app = Flask(__name__)
+
+# ---- HTTP Basic Auth -------------------------------------------------------
+_AUTH_ENABLED = bool(config.DASHBOARD_USER and config.DASHBOARD_PASSWORD)
+
+@app.before_request
+def check_auth():
+    """Block every request unless valid Basic Auth credentials are provided."""
+    if not _AUTH_ENABLED:
+        return
+    auth = request.authorization
+    if not auth or auth.username != config.DASHBOARD_USER \
+                 or auth.password != config.DASHBOARD_PASSWORD:
+        return Response(
+            "Authentication required.",
+            401,
+            {"WWW-Authenticate": 'Basic realm="HEXIS Dashboard"'},
+        )
 _client = BitunixClient(config.API_KEY, config.SECRET_KEY)
 
 # Circuit breakers for the dashboard process

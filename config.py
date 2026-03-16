@@ -71,6 +71,12 @@ LSOB_SCAN_DEPTH  = int(os.getenv("LSOB_SCAN_DEPTH", "25")) # how far back to sca
 # ---- Bot Behaviour ---------------------------------------------------------
 LOOP_INTERVAL_SECONDS = 15  # How often the bot checks prices (seconds)
 
+# ---- Dashboard Auth --------------------------------------------------------
+# Set both to enable HTTP Basic Auth on the web dashboard.
+# Leave empty to disable (only safe on a trusted local network).
+DASHBOARD_USER     = os.getenv("DASHBOARD_USER", "")
+DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "")
+
 # ---- Telegram Notifications ------------------------------------------------
 # Optional – leave empty to disable. See notifications.py for setup instructions.
 TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN",   "")
