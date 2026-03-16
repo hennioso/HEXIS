@@ -516,7 +516,10 @@ def api_circuit_breaker_status():
 @app.route("/api/circuit_breaker/reset", methods=["POST"])
 def api_circuit_breaker_reset():
     """Reset circuit breakers (optionally a specific strategy)."""
-    payload  = request.get_json(force=True) or {}
+    try:
+        payload = request.get_json(force=True, silent=True) or {}
+    except Exception:
+        payload = {}
     strategy = payload.get("strategy")   # None = reset everything
     circuit_breaker.reset(strategy)
     return jsonify({"ok": True, "reset": strategy or "all"})

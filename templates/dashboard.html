@@ -2074,10 +2074,21 @@
   }
 
   async function resetCircuitBreaker() {
+    const btn = document.querySelector('#cb-banner button');
+    if (btn) { btn.disabled = true; btn.textContent = 'Resetting…'; }
     try {
-      await fetch('/api/circuit_breaker/reset', { method: 'POST' });
+      const r = await fetch('/api/circuit_breaker/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       await loadCircuitBreaker();
-    } catch (e) { /* silent */ }
+    } catch (e) {
+      alert('Reset failed: ' + e.message);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Reset'; }
+    }
   }
 
   // ---- Equity Curve ----
