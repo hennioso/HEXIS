@@ -107,9 +107,102 @@
       color: var(--muted);
       font-size: 12px;
     }
+    .bitunix-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 700;
+      background: linear-gradient(135deg,#f7a12a,#f85149);
+      color: #fff; text-decoration: none; border: none; cursor: pointer;
+      white-space: nowrap; letter-spacing: .02em;
+    }
+    .bitunix-btn:hover { opacity: .85; }
 
     /* ---- Layout ---- */
     main { padding: 24px 28px; max-width: 1400px; margin: 0 auto; }
+
+    /* ================================================================
+       MOBILE RESPONSIVE  (≤ 768px)
+       ================================================================ */
+    @media (max-width: 768px) {
+      /* Header */
+      header { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
+      header h1 { font-size: 16px; }
+      .price-ticker { display: none; }          /* hide BTC ticker on mobile */
+      .header-divider { display: none; }
+      .update-info { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+      .bitunix-btn { font-size: 11px; padding: 5px 10px; }
+      #notify-btn, #sync-btn { font-size: 10px; padding: 3px 8px; }
+
+      /* Layout */
+      main { padding: 12px 12px; }
+
+      /* Balance banner → 2-column grid on small screens */
+      .balance-banner {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        padding: 12px;
+      }
+      .bal-divider { display: none; }
+      .bal-item { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+      .bal-value { font-size: 16px; }
+
+      /* Symbol strip → 2 columns */
+      .symbol-strip { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+      .sym-card { padding: 10px 12px; }
+      .sym-name { font-size: 12px; }
+      .sym-price { font-size: 18px; }
+
+      /* Stats grid → 2 columns */
+      .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+      .stat-card { padding: 14px 14px; }
+      .stat-card .value { font-size: 20px; }
+
+      /* Charts → single column */
+      .charts-row { grid-template-columns: 1fr; }
+      .chart-wrap { height: 180px; }
+
+      /* Tab navigation → scrollable horizontal */
+      .tab-nav { padding: 0 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
+      .tab-btn { white-space: nowrap; font-size: 12px; padding: 8px 12px; }
+
+      /* Tables → horizontal scroll */
+      .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      table { min-width: 600px; }
+      td, th { font-size: 11px; padding: 8px 10px; }
+
+      /* Active trades table: hide less critical columns */
+      .col-hide-mobile { display: none; }
+
+      /* Analytics grid */
+      .analytics-grid { grid-template-columns: repeat(2, 1fr); }
+
+      /* Backtest form */
+      .backtest-form { flex-direction: column; gap: 8px; }
+      .backtest-field { width: 100%; }
+      .run-bt-btn { width: 100%; }
+      .bt-stats-grid { grid-template-columns: repeat(2, 1fr); }
+
+      /* Agent mode bar */
+      .agent-mode-bar { padding: 6px 0; }
+      .agent-mode-btn { font-size: 12px; padding: 6px 14px; }
+
+      /* Circuit breaker banner */
+      .cb-banner { flex-direction: column; align-items: flex-start; gap: 8px; padding: 10px 14px; }
+
+      /* Manual trade modal */
+      .modal-box { padding: 20px 16px; }
+      .modal-grid { grid-template-columns: 1fr; }
+
+      /* Trade detail modal */
+      .modal-overlay .modal-box { width: 95vw; }
+    }
+
+    /* Very small phones (≤ 400px) */
+    @media (max-width: 400px) {
+      .stats-grid { grid-template-columns: 1fr; }
+      .symbol-strip { grid-template-columns: repeat(2, 1fr); }
+      .balance-banner { grid-template-columns: 1fr; }
+      .analytics-grid { grid-template-columns: 1fr; }
+    }
 
     /* ---- Symbol Strip ---- */
     .symbol-strip {
@@ -707,6 +800,7 @@
     HEXIS
   </h1>
   <div class="update-info" style="text-align:right;display:flex;align-items:center;gap:12px">
+    <a class="bitunix-btn" href="https://www.bitunix.com/register?vipCode=HENNIOSO" target="_blank" rel="noopener">▶ Bitunix</a>
     <button id="notify-btn" onclick="requestNotifications()" style="display:none;padding:4px 10px;font-size:11px;background:rgba(88,166,255,0.1);color:#58a6ff;border:1px solid rgba(88,166,255,0.3);border-radius:6px;cursor:pointer">🔔 Enable Notifications</button>
     <button id="sync-btn" onclick="syncClosed()" style="padding:4px 10px;font-size:11px;background:rgba(63,185,80,0.1);color:#3fb950;border:1px solid rgba(63,185,80,0.3);border-radius:6px;cursor:pointer">⟳ Sync Trades</button>
     <span class="refresh-info" id="last-update">Loading...</span>
@@ -909,10 +1003,10 @@
             <th>Time (Entry)</th>
             <th>Symbol</th>
             <th>Direction</th>
-            <th>Qty</th>
+            <th class="col-hide-mobile">Qty</th>
             <th>Entry</th>
-            <th>TP</th>
-            <th>SL</th>
+            <th class="col-hide-mobile">TP</th>
+            <th class="col-hide-mobile">SL</th>
             <th>PnL (USDT)</th>
             <th>Action</th>
           </tr>
@@ -1370,10 +1464,10 @@
         <td style="color:var(--muted);font-size:12px">${fmtDate(t.entry_time)}</td>
         <td><span class="sym-badge sym-${t.symbol.replace('USDT','')}">${t.symbol.replace('USDT','')}</span></td>
         <td><span class="dir-badge dir-${t.direction}">${t.direction}</span></td>
-        <td>${fmt(t.qty, 4)}</td>
+        <td class="col-hide-mobile">${fmt(t.qty, 4)}</td>
         <td>${fmtPrice(t.entry_price)}</td>
-        <td style="color:var(--green);font-size:12px">${t.tp_price ? fmtPrice(t.tp_price) : '—'}</td>
-        <td style="color:var(--red);font-size:12px">${t.sl_price ? fmtPrice(t.sl_price) : '—'}</td>
+        <td class="col-hide-mobile" style="color:var(--green);font-size:12px">${t.tp_price ? fmtPrice(t.tp_price) : '—'}</td>
+        <td class="col-hide-mobile" style="color:var(--red);font-size:12px">${t.sl_price ? fmtPrice(t.sl_price) : '—'}</td>
         <td><span style="font-size:11px;color:var(--muted)">uPnL </span>${upnl}${partial}</td>
         <td><button class="close-btn" onclick="event.stopPropagation();closePosition('${t.symbol}','${t.trade_id}',this)">Close</button></td>
       </tr>`;
