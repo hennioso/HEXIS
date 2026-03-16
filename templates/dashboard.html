@@ -128,7 +128,7 @@
       header h1 { font-size: 16px; }
       .price-ticker { display: none; }          /* hide BTC ticker on mobile */
       .header-divider { display: none; }
-      .update-info { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+      .update-info { flex-direction: row; flex-wrap: nowrap; gap: 6px; align-items: center; }
       .bitunix-btn { font-size: 11px; padding: 5px 10px; }
       #notify-btn, #sync-btn { font-size: 10px; padding: 3px 8px; }
 
@@ -825,10 +825,10 @@
   </h1>
   <div class="update-info" style="text-align:right;display:flex;align-items:center;gap:12px">
     <a class="bitunix-btn" href="https://www.bitunix.com/register?inviteCode=vefzzy" target="_blank" rel="noopener">▶ Bitunix</a>
-    <button id="notify-btn" onclick="requestNotifications()" style="display:none;padding:4px 10px;font-size:11px;background:rgba(88,166,255,0.1);color:#58a6ff;border:1px solid rgba(88,166,255,0.3);border-radius:6px;cursor:pointer">🔔 Enable Notifications</button>
-    <button id="sync-btn" onclick="syncClosed()" style="padding:4px 10px;font-size:11px;background:rgba(63,185,80,0.1);color:#3fb950;border:1px solid rgba(63,185,80,0.3);border-radius:6px;cursor:pointer">⟳ Sync Trades</button>
-    <span class="refresh-info" id="last-update">Loading...</span>
-    <a href="/logout" style="padding:4px 10px;font-size:11px;background:rgba(139,148,158,0.1);color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;text-decoration:none">⎋ Logout</a>
+    <button id="notify-btn" onclick="requestNotifications()" style="display:none;padding:4px 10px;font-size:11px;background:rgba(88,166,255,0.1);color:#58a6ff;border:1px solid rgba(88,166,255,0.3);border-radius:6px;cursor:pointer;white-space:nowrap">🔔</button>
+    <button id="sync-btn" onclick="syncClosed()" style="padding:4px 10px;font-size:11px;background:rgba(63,185,80,0.1);color:#3fb950;border:1px solid rgba(63,185,80,0.3);border-radius:6px;cursor:pointer;white-space:nowrap">⟳ Sync</button>
+    <span class="refresh-info" id="last-update" style="white-space:nowrap">Loading...</span>
+    <a href="/logout" style="padding:4px 10px;font-size:11px;background:rgba(139,148,158,0.1);color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;text-decoration:none;white-space:nowrap">⎋</a>
   </div>
 </header>
 
