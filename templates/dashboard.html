@@ -124,97 +124,130 @@
        MOBILE RESPONSIVE  (≤ 768px)
        ================================================================ */
     @media (max-width: 768px) {
-      /* Header */
-      header { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
-      header h1 { font-size: 16px; }
-      .price-ticker { display: none; }          /* hide BTC ticker on mobile */
+      /* Prevent ANY horizontal overflow */
+      html, body { overflow-x: hidden; max-width: 100vw; }
+      header, main, .balance-banner, .symbol-strip, .stats-grid,
+      .charts-row, .table-card, .tab-nav, .agent-mode-bar, .cb-banner {
+        max-width: 100%;
+        box-sizing: border-box;
+      }
+
+      /* Header: logo + buttons in one compact row */
+      header {
+        padding: 10px 12px;
+        flex-wrap: nowrap;
+        gap: 8px;
+        overflow: hidden;
+      }
+      header h1 { font-size: 14px; flex-shrink: 0; }
+      header h1 svg { width: 28px; height: 28px; }
+      .price-ticker { display: none; }
       .header-divider { display: none; }
-      .update-info { flex-direction: row; flex-wrap: nowrap; gap: 6px; align-items: center; }
-      .bitunix-btn { font-size: 11px; padding: 5px 10px; }
-      #notify-btn, #sync-btn { font-size: 10px; padding: 3px 8px; }
+      .update-info {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        gap: 6px;
+        align-items: center;
+        overflow: hidden;
+        min-width: 0;
+      }
+      .bitunix-btn { font-size: 10px; padding: 4px 8px; }
+      #sync-btn { font-size: 10px; padding: 3px 7px; }
+      #last-update { display: none; } /* hide timestamp on mobile — saves space */
 
       /* Layout */
-      main { padding: 12px 12px; }
+      main { padding: 10px; }
 
-      /* Balance banner → 2-column grid on small screens */
+      /* Balance banner → strict 2×2 grid */
       .balance-banner {
         display: grid !important;
         grid-template-columns: 1fr 1fr;
-        gap: 8px;
-        padding: 12px;
-        flex-wrap: unset;
+        gap: 6px;
+        padding: 10px;
+        margin-bottom: 10px;
       }
       .bal-divider { display: none; }
       .bal-item {
         border: 1px solid var(--border);
         border-radius: 8px;
-        padding: 10px 12px;
+        padding: 8px 10px;
         min-width: 0;
+        overflow: hidden;
       }
-      .bal-item:first-child { padding-left: 12px; }
-      .bal-label { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .bal-value { font-size: 18px; white-space: nowrap; }
+      .bal-item:first-child { padding-left: 10px; }
+      .bal-label {
+        font-size: 9px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .bal-value {
+        font-size: 15px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
 
-      /* Symbol strip → 2 columns */
-      .symbol-strip { grid-template-columns: repeat(2, 1fr); gap: 8px; }
-      .sym-card { padding: 12px 14px; }
-      .sym-name { font-size: 11px; }
-      .sym-price { font-size: 20px; }
-      /* Strategy buttons: show only icons/abbrev, 2x2 grid */
-      .strat-btns { grid-template-columns: repeat(4, 1fr); gap: 3px; margin-top: 6px; }
-      .strat-btn { font-size: 7px; padding: 3px 1px; }
+      /* Symbol strip → strict 2 columns, no overflow */
+      .symbol-strip {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+      .sym-card { padding: 10px 10px; min-width: 0; overflow: hidden; }
+      .sym-name { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .sym-price { font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .sym-chg { font-size: 11px; }
+      /* Strategy buttons: compact 4-col strip */
+      .strat-btns { grid-template-columns: repeat(4, 1fr); gap: 2px; margin-top: 5px; }
+      .strat-btn { font-size: 7px; padding: 3px 1px; overflow: hidden; text-overflow: ellipsis; }
 
       /* Stats grid → 2 columns */
-      .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-      .stat-card { padding: 14px 14px; }
-      .stat-card .value { font-size: 20px; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 16px; }
+      .stat-card { padding: 12px 12px; }
+      .stat-card .value { font-size: 18px; }
 
       /* Charts → single column */
-      .charts-row { grid-template-columns: 1fr; }
-      .chart-wrap { height: 180px; }
+      .charts-row { grid-template-columns: 1fr; gap: 10px; }
+      .chart-wrap { height: 160px; }
 
-      /* Tab navigation → scrollable horizontal */
-      .tab-nav { padding: 0 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
+      /* Tab navigation */
+      .tab-nav { padding: 0 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
       .tab-btn { white-space: nowrap; font-size: 12px; padding: 8px 12px; }
 
-      /* Tables → horizontal scroll */
+      /* Tables */
       .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-      table { min-width: 600px; }
-      td, th { font-size: 11px; padding: 8px 10px; }
-
-      /* Active trades table: hide less critical columns */
+      table { min-width: 500px; }
+      td, th { font-size: 11px; padding: 7px 8px; }
       .col-hide-mobile { display: none; }
 
-      /* Analytics grid */
+      /* Analytics */
       .analytics-grid { grid-template-columns: repeat(2, 1fr); }
 
-      /* Backtest form */
+      /* Backtest */
       .backtest-form { flex-direction: column; gap: 8px; }
       .backtest-field { width: 100%; }
       .run-bt-btn { width: 100%; }
       .bt-stats-grid { grid-template-columns: repeat(2, 1fr); }
 
       /* Agent mode bar */
-      .agent-mode-bar { padding: 6px 0; }
-      .agent-mode-btn { font-size: 12px; padding: 6px 14px; }
+      .agent-mode-bar { padding: 4px 0; }
+      .agent-mode-btn { font-size: 12px; padding: 6px 14px; width: 100%; }
 
       /* Circuit breaker banner */
-      .cb-banner { flex-direction: column; align-items: flex-start; gap: 8px; padding: 10px 14px; }
+      .cb-banner { flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px 12px; }
 
-      /* Manual trade modal */
-      .modal-box { padding: 20px 16px; }
+      /* Modals */
+      .modal-box { padding: 18px 14px; width: 96vw !important; }
       .modal-grid { grid-template-columns: 1fr; }
-
-      /* Trade detail modal */
-      .modal-overlay .modal-box { width: 95vw; }
     }
 
     /* Very small phones (≤ 400px) */
     @media (max-width: 400px) {
-      .stats-grid { grid-template-columns: 1fr; }
-      .symbol-strip { grid-template-columns: repeat(2, 1fr); }
-      .balance-banner { grid-template-columns: 1fr; }
-      .analytics-grid { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .balance-banner { grid-template-columns: 1fr 1fr; }
+      .bal-value { font-size: 13px; }
+      .sym-price { font-size: 15px; }
     }
 
     /* ---- Symbol Strip ---- */
