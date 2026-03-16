@@ -138,19 +138,31 @@
 
       /* Balance banner → 2-column grid on small screens */
       .balance-banner {
+        display: grid !important;
         grid-template-columns: 1fr 1fr;
         gap: 8px;
         padding: 12px;
+        flex-wrap: unset;
       }
       .bal-divider { display: none; }
-      .bal-item { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
-      .bal-value { font-size: 16px; }
+      .bal-item {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        min-width: 0;
+      }
+      .bal-item:first-child { padding-left: 12px; }
+      .bal-label { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .bal-value { font-size: 18px; white-space: nowrap; }
 
       /* Symbol strip → 2 columns */
       .symbol-strip { grid-template-columns: repeat(2, 1fr); gap: 8px; }
-      .sym-card { padding: 10px 12px; }
-      .sym-name { font-size: 12px; }
-      .sym-price { font-size: 18px; }
+      .sym-card { padding: 12px 14px; }
+      .sym-name { font-size: 11px; }
+      .sym-price { font-size: 20px; }
+      /* Strategy buttons: show only icons/abbrev, 2x2 grid */
+      .strat-btns { grid-template-columns: repeat(4, 1fr); gap: 3px; margin-top: 6px; }
+      .strat-btn { font-size: 7px; padding: 3px 1px; }
 
       /* Stats grid → 2 columns */
       .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
