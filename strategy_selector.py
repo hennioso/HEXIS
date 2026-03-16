@@ -68,7 +68,7 @@ def _score_sniper(df5m, df15m=None) -> tuple[int, list[str]]:
         best_dist   = min(long_dist, short_dist)
         direction   = "long" if long_dist < short_dist else "short"
 
-        if best_dist <= 0.003:
+        if best_dist <= 0.005:
             score += 6
             reasons.append(f"price AT Fib 0.882 ({best_dist*100:.2f}% {direction})")
         elif best_dist <= 0.008:

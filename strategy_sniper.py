@@ -29,7 +29,7 @@ from indicators import klines_to_df, add_fib_indicators, ema
 
 
 # Price must be within this % of the 0.882 level to trigger
-FIB_TOLERANCE = 0.003       # 0.3% — tighter, more precise entries
+FIB_TOLERANCE = 0.005       # 0.5% — wide enough to survive API round-trip delay
 
 # Buffer beyond the structural swing point for SL placement
 SL_BUFFER = 0.002           # 0.2%
