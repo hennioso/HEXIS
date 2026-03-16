@@ -487,6 +487,45 @@ def api_circuit_breaker_reset():
     return jsonify({"ok": True, "reset": strategy or "all"})
 
 
+@app.route("/api/trades/manual", methods=["POST"])
+def api_manual_trade():
+    """Insert a manually opened trade into the DB."""
+    data = request.get_json(force=True) or {}
+    required = ("symbol", "direction", "entry_price", "qty")
+    missing = [f for f in required if not data.get(f)]
+    if missing:
+        return jsonify({"ok": False, "error": f"Missing fields: {', '.join(missing)}"}), 400
+
+    symbol      = data["symbol"].upper().strip()
+    direction   = data["direction"].lower().strip()   # "long" / "short"
+    entry_price = float(data["entry_price"])
+    qty         = float(data["qty"])
+    tp_price    = float(data["tp_price"])  if data.get("tp_price")  else None
+    sl_price    = float(data["sl_price"])  if data.get("sl_price")  else None
+    strategy    = data.get("strategy", "manual") or "manual"
+    note        = data.get("note", "")
+
+    import uuid
+    trade_id = f"MANUAL-{uuid.uuid4().hex[:8].upper()}"
+
+    row_id = db.open_trade(
+        trade_id=trade_id,
+        order_id=trade_id,
+        symbol=symbol,
+        direction=direction,
+        qty=qty,
+        entry_price=entry_price,
+        tp_price=tp_price,
+        sl_price=sl_price,
+        strategy=strategy,
+    )
+    # Store note if provided
+    if note:
+        db.update_trade_field(row_id, "note", note)
+
+    return jsonify({"ok": True, "trade_id": trade_id, "row_id": row_id})
+
+
 @app.route("/api/backtest")
 def api_backtest():
     """

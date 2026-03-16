@@ -255,6 +255,16 @@ def update_trade_margin(trade_id: str, margin_usdt: float, leverage: int):
         conn.commit()
 
 
+def update_trade_field(row_id: int, field: str, value):
+    """Generic update of a single column by DB row id (internal use only)."""
+    _ALLOWED = {"note", "strategy", "tp_price", "sl_price"}
+    if field not in _ALLOWED:
+        raise ValueError(f"Field '{field}' not allowed for generic update")
+    with _connect() as conn:
+        conn.execute(f"UPDATE trades SET {field}=? WHERE id=?", (value, row_id))
+        conn.commit()
+
+
 def add_partial_pnl(trade_id: str, pnl: float):
     """Adds realized PnL from a partial close to the running total."""
     with _connect() as conn:
