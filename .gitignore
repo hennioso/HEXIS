@@ -5,6 +5,7 @@
 trades.db
 bot.log
 *.log
+strategies.json
 
 # Python
 __pycache__/

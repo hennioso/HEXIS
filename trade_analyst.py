@@ -1,24 +1,31 @@
 """
-Trade Analyst – AI-powered trade performance analyzer.
+Multi-AI Trade Analyst – parallel analysis by Claude, GPT-4o, and Gemini.
 
-Uses Claude (claude-opus-4-6 with adaptive thinking) to evaluate strategy
-performance and recommend conservative parameter adjustments:
+Each AI independently analyzes the same trade data with a different angle:
+  - Claude  (Opus 4.6)    — conservative quant analyst, stability focus
+  - GPT-4o  (OpenAI)      — risk management specialist, drawdown focus
+  - Gemini  (2.0 Flash)   — pattern analyst, time/symbol consistency focus
 
-  - MIN_OPEN_SCORE threshold (Agent Scanner gate, range 5–9)
-  - Per-symbol strategy preferences (auto / sniper / lsob / scalp / trend)
+Results are combined via a consensus mechanism:
+  - MIN_OPEN_SCORE: rounded average of all adjustment recommendations
+  - Symbol strategies: applied only when ≥2 AIs agree on the same change
 
 Safety rules:
   - Never adjusts while any position is open
   - MIN_OPEN_SCORE is hard-capped to [5, 9]
-  - All decisions are logged to analyst.log with full reasoning
+  - All individual + consensus decisions logged to analyst.log
   - Minimum MIN_CLOSED_TRADES needed before analysis runs
+  - GPT-4o and Gemini are optional — system works with Claude alone
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Optional
 
@@ -30,9 +37,78 @@ import database as db
 import strategy_scanner
 import strategy_state
 
+# Optional AI providers — gracefully absent if not installed or not configured
+try:
+    import openai as _openai_module
+    _OPENAI_AVAILABLE = True
+except ImportError:
+    _OPENAI_AVAILABLE = False
+
+try:
+    import google.generativeai as genai
+    _GEMINI_AVAILABLE = True
+except ImportError:
+    _GEMINI_AVAILABLE = False
+
+
+log = logging.getLogger("TradeAnalyst")
+
+# ---- Configuration -----------------------------------------------------------
+ANALYSIS_INTERVAL_MINUTES = 240
+STARTUP_DELAY_MINUTES     = 30
+MIN_CLOSED_TRADES         = 5
+SCORE_BOUNDS              = (5, 9)
+
+
+# ---- Pydantic output schema --------------------------------------------------
+
+class ScoreAdjustment(BaseModel):
+    new_value: int
+    reason:    str
+
+
+class SymbolAdjustment(BaseModel):
+    symbol:   str
+    strategy: str
+    reason:   str
+
+
+class AnalysisResult(BaseModel):
+    summary:            str
+    should_adjust:      bool
+    wait_reason:        Optional[str] = None
+    score_adjustment:   Optional[ScoreAdjustment] = None
+    symbol_adjustments: list[SymbolAdjustment] = []
+
+
+# ---- System prompts (each AI gets a different angle) -------------------------
+
+_SYSTEM_CLAUDE = (
+    "You are an expert quantitative trading analyst. "
+    "Analyze crypto futures agent performance and recommend conservative, "
+    "data-driven parameter adjustments. Prioritize stability — if in doubt, "
+    "recommend no change."
+)
+
+_SYSTEM_OPENAI = (
+    "You are a risk management specialist for algorithmic crypto futures trading. "
+    "Your primary focus is capital preservation: drawdown reduction, avoiding "
+    "over-trading, and protecting gains. Be conservative — only recommend changes "
+    "when the risk/reward evidence is clear."
+)
+
+_SYSTEM_GEMINI = (
+    "You are a quantitative pattern analyst for crypto futures trading. "
+    "Your focus is identifying consistent edges: which strategies and symbols "
+    "show repeatable win rates, which time windows underperform, and whether "
+    "the current parameter configuration matches observed patterns. "
+    "Only recommend changes backed by statistical evidence."
+)
+
+
+# ---- Helper functions --------------------------------------------------------
 
 def _compute_streak(recent_trades: list[dict]) -> dict:
-    """Current win/loss streak from the most recent closed trades."""
     closed = [t for t in recent_trades if t["status"] != "open" and t.get("pnl_usdt") is not None]
     if not closed:
         return {"type": "none", "length": 0}
@@ -45,37 +121,6 @@ def _compute_streak(recent_trades: list[dict]) -> dict:
             break
     return {"type": streak_type, "length": length}
 
-log = logging.getLogger("TradeAnalyst")
-
-# ---- Configuration -----------------------------------------------------------
-ANALYSIS_INTERVAL_MINUTES = 240  # How often to run (minutes)
-STARTUP_DELAY_MINUTES     = 30   # Wait before first analysis after bot start
-MIN_CLOSED_TRADES         = 5    # Minimum closed trades required to analyze
-SCORE_BOUNDS              = (5, 9)
-
-
-# ---- Pydantic output schema --------------------------------------------------
-
-class ScoreAdjustment(BaseModel):
-    new_value: int    # Target MIN_OPEN_SCORE
-    reason: str
-
-
-class SymbolAdjustment(BaseModel):
-    symbol:   str    # e.g. "BTCUSDT"
-    strategy: str    # "auto" | "sniper" | "lsob" | "scalp" | "trend"
-    reason:   str
-
-
-class AnalysisResult(BaseModel):
-    summary:            str
-    should_adjust:      bool
-    wait_reason:        Optional[str] = None
-    score_adjustment:   Optional[ScoreAdjustment] = None
-    symbol_adjustments: list[SymbolAdjustment] = []
-
-
-# ---- Prompt builder ----------------------------------------------------------
 
 def _build_context(
     stats: dict,
@@ -83,9 +128,8 @@ def _build_context(
     current_score: int,
     current_strategies: dict,
 ) -> str:
-    """Assemble all bot performance data into a prompt string."""
+    """Assemble all agent performance data into a shared prompt string."""
 
-    # Per-strategy PnL summary (closed trades only)
     strat_stats: dict[str, dict] = {}
     for t in recent_trades:
         if t["status"] == "open":
@@ -100,7 +144,6 @@ def _build_context(
             strat_stats[strat]["losses"] += 1
         strat_stats[strat]["total_pnl"] = round(strat_stats[strat]["total_pnl"] + pnl, 4)
 
-    # Per-symbol PnL summary (closed trades only)
     sym_stats: dict[str, dict] = {}
     for t in recent_trades:
         if t["status"] == "open":
@@ -115,7 +158,6 @@ def _build_context(
             sym_stats[sym]["losses"] += 1
         sym_stats[sym]["total_pnl"] = round(sym_stats[sym]["total_pnl"] + pnl, 4)
 
-    # Last 20 closed trades for pattern inspection
     last_20 = [
         {
             "symbol":    t["symbol"],
@@ -129,13 +171,12 @@ def _build_context(
         if t["status"] != "open"
     ][:20]
 
-    # Drawdown metrics + hourly distribution
     analytics    = db.get_analytics()
     drawdown     = analytics.get("drawdown", {})
     streak       = _compute_streak(recent_trades)
     hourly_stats = db.get_hourly_stats()
 
-    return f"""You are a quantitative trading analyst evaluating HEXIS, an autonomous crypto futures agent on Bitunix.
+    return f"""You are analyzing HEXIS, an autonomous crypto futures agent on Bitunix.
 
 ## Agent Setup
 - Symbols: {config.SYMBOLS}
@@ -148,22 +189,21 @@ def _build_context(
 - SCALP (BB + RSI extremes + volume):   max  9
 - FVG  (Fair Value Gap retest):         max  9
 - TREND (EMA 9/21/50 alignment):        max  7
-  → Note: TREND can never reach a threshold of 8+, so raising score to 8 excludes TREND entries.
-  → FVG: price retesting an unfilled 3-candle imbalance zone in the trend direction.
+  → TREND can never reach threshold 8+; raising to 8 excludes TREND entries.
 
 ## Current Configuration
 - MIN_OPEN_SCORE: {current_score}/10
 - Per-symbol strategies: {json.dumps(current_strategies, indent=2)}
 
 ## Overall Performance ({stats['total_trades']} closed trades)
-- Win rate:        {stats['win_rate']}%
-- Total PnL:       {stats['total_pnl']} USDT
-- Avg win:         {stats['avg_win']} USDT
-- Avg loss:        {stats['avg_loss']} USDT
-- Best trade:      {stats['best_trade']} USDT | Worst: {stats['worst_trade']} USDT
+- Win rate:         {stats['win_rate']}%
+- Total PnL:        {stats['total_pnl']} USDT
+- Avg win:          {stats['avg_win']} USDT
+- Avg loss:         {stats['avg_loss']} USDT
+- Best / Worst:     {stats['best_trade']} / {stats['worst_trade']} USDT
 - Long/Short ratio: {stats['long_trades']}/{stats['short_trades']}
-- Max drawdown:    {drawdown.get('max_drawdown_usdt', 'N/A')} USDT
-- Current streak:  {streak['length']} consecutive {streak['type']}s
+- Max drawdown:     {drawdown.get('max_drawdown_usdt', 'N/A')} USDT
+- Current streak:   {streak['length']} consecutive {streak['type']}s
 
 ## Per-Strategy Breakdown
 {json.dumps(strat_stats, indent=2)}
@@ -175,37 +215,153 @@ def _build_context(
 {json.dumps(last_20, indent=2)}
 
 ## Hourly Performance (UTC)
-{json.dumps(hourly_stats, indent=2) if hourly_stats else "Insufficient data for hourly breakdown."}
+{json.dumps(hourly_stats, indent=2) if hourly_stats else "Insufficient data."}
 
 ## Your Task
-Analyze the performance data and produce recommendations for exactly two things:
+Recommend adjustments for exactly two parameters:
 
 1. **MIN_OPEN_SCORE** (currently {current_score}):
-   - Raise by 1 if: win rate < 40%, or SL-hit rate is high, or too many marginal entries
-   - Lower by 1 if: win rate > 60% with 15+ trades AND you suspect the threshold is filtering good setups
-   - Keep as-is if: insufficient data (<10 closed trades per strategy) or performance is acceptable
-   - Hard bounds: minimum 5, maximum 9
+   - Raise by 1 if: win rate < 40%, high SL-hit rate, or too many marginal entries
+   - Lower by 1 if: win rate > 60% with 15+ trades AND threshold may be too restrictive
+   - Keep if: data is insufficient or performance is acceptable
+   - Bounds: min 5, max 9
 
-2. **Per-symbol strategy** (currently {json.dumps(current_strategies)}):
-   - Pin a symbol to a specific strategy only if it consistently outperforms others (≥5 trades evidence)
-   - Set back to "auto" if a pinned strategy is underperforming
-   - No change if data is insufficient or mixed
-   - Valid values: auto | sniper | lsob | scalp | trend | fvg
+2. **Per-symbol strategy** ({json.dumps(current_strategies)}):
+   - Pin to a strategy only with ≥5 trades of consistent evidence
+   - Revert to "auto" if pinned strategy underperforms
+   - Valid: auto | sniper | lsob | scalp | trend | fvg
 
-3. **Time-of-day filter** (optional recommendation only — not auto-applied):
-   - If certain UTC hours show consistently low win rate with ≥5 trades, flag them in your summary
-   - This is advisory only; no parameter change is needed
+3. **Time-of-day** (advisory only — not auto-applied):
+   - Flag UTC hours with consistently low win rate (≥5 trades) in your summary
 
-Be conservative. If in doubt, recommend no change. Stability is valuable.
-Explain your reasoning clearly with reference to the numbers."""
+Be conservative. Stability is valuable. Explain reasoning with reference to numbers."""
 
 
-# ---- Core analysis -----------------------------------------------------------
+# ---- Per-AI analysis functions -----------------------------------------------
 
-def _run_single_analysis(client: anthropic.Anthropic) -> None:
-    """Run one analysis cycle and apply safe adjustments."""
+def _analyse_with_claude(client: anthropic.Anthropic, prompt: str) -> AnalysisResult:
+    response = client.messages.parse(
+        model="claude-opus-4-6",
+        max_tokens=2048,
+        thinking={"type": "adaptive"},
+        system=_SYSTEM_CLAUDE,
+        messages=[{"role": "user", "content": prompt}],
+        output_format=AnalysisResult,
+    )
+    result = response.parsed_output
+    if result is None:
+        raise ValueError("Claude returned no structured output")
+    return result
 
-    # Guard: skip if any position is open
+
+def _analyse_with_openai(client, prompt: str) -> AnalysisResult:
+    response = client.beta.chat.completions.parse(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": _SYSTEM_OPENAI},
+            {"role": "user",   "content": prompt},
+        ],
+        response_format=AnalysisResult,
+    )
+    result = response.choices[0].message.parsed
+    if result is None:
+        raise ValueError("GPT-4o returned no structured output")
+    return result
+
+
+def _analyse_with_gemini(model, prompt: str) -> AnalysisResult:
+    full_prompt = f"{_SYSTEM_GEMINI}\n\n{prompt}"
+    response = model.generate_content(
+        full_prompt,
+        generation_config=genai.GenerationConfig(
+            response_mime_type="application/json",
+            response_schema=AnalysisResult,
+        ),
+    )
+    return AnalysisResult.model_validate_json(response.text)
+
+
+# ---- Consensus ---------------------------------------------------------------
+
+def _build_consensus(
+    results: list[tuple[str, AnalysisResult]],
+    current_score: int,
+) -> AnalysisResult:
+    """
+    Combines multiple AI analyses into a single consensus recommendation.
+      - MIN_OPEN_SCORE: rounded average of all non-None adjustments
+      - Symbol adjustments: require majority agreement (≥2 AIs, same strategy)
+    """
+    if len(results) == 1:
+        name, r = results[0]
+        r.summary = f"[{name}] {r.summary}"
+        return r
+
+    # --- Score consensus ---
+    score_votes = [
+        (name, r.score_adjustment.new_value)
+        for name, r in results
+        if r.should_adjust and r.score_adjustment is not None
+    ]
+    consensus_score: Optional[ScoreAdjustment] = None
+    if score_votes:
+        avg = round(sum(v for _, v in score_votes) / len(score_votes))
+        names = ", ".join(n for n, _ in score_votes)
+        consensus_score = ScoreAdjustment(
+            new_value=avg,
+            reason=f"Consensus ({len(score_votes)}/{len(results)} analysts agree, avg={avg}): {names}",
+        )
+
+    # --- Symbol consensus ---
+    # Collect votes: {symbol: Counter({strategy: count})}
+    sym_votes: dict[str, Counter] = {}
+    sym_reasons: dict[str, dict[str, list[str]]] = {}
+    for name, r in results:
+        if not r.should_adjust:
+            continue
+        for adj in r.symbol_adjustments:
+            sym_votes.setdefault(adj.symbol, Counter())[adj.strategy] += 1
+            sym_reasons.setdefault(adj.symbol, {}).setdefault(adj.strategy, []).append(
+                f"{name}: {adj.reason[:80]}"
+            )
+
+    majority = max(2, len(results) // 2 + 1)
+    consensus_syms: list[SymbolAdjustment] = []
+    for symbol, counts in sym_votes.items():
+        best_strat, votes = counts.most_common(1)[0]
+        if votes >= majority:
+            reasons_str = " | ".join(sym_reasons[symbol].get(best_strat, [])[:2])
+            consensus_syms.append(SymbolAdjustment(
+                symbol=symbol,
+                strategy=best_strat,
+                reason=f"Majority ({votes}/{len(results)}): {reasons_str}",
+            ))
+
+    should_adjust = bool(consensus_score or consensus_syms)
+
+    # Build combined summary
+    individual = "\n".join(
+        f"  [{n}]: {r.summary[:150]}" for n, r in results
+    )
+    summary = f"Multi-AI consensus ({len(results)} analysts):\n{individual}"
+
+    return AnalysisResult(
+        summary=summary,
+        should_adjust=should_adjust,
+        score_adjustment=consensus_score,
+        symbol_adjustments=consensus_syms,
+    )
+
+
+# ---- Orchestrator ------------------------------------------------------------
+
+def _run_analysis_cycle(
+    claude_client: anthropic.Anthropic,
+    openai_client,
+    gemini_model,
+) -> None:
+    """Run one full analysis cycle: all AIs in parallel → consensus → apply."""
+
     open_trades = [t for t in db.get_all_trades(limit=50) if t["status"] == "open"]
     if open_trades:
         log.info(f"Analysis skipped — {len(open_trades)} open position(s) active.")
@@ -219,90 +375,124 @@ def _run_single_analysis(client: anthropic.Anthropic) -> None:
         )
         return
 
-    recent_trades    = db.get_all_trades(limit=100)
-    current_score    = strategy_scanner.MIN_OPEN_SCORE
-    current_strats   = strategy_state.load()
+    recent_trades  = db.get_all_trades(limit=100)
+    current_score  = strategy_scanner.MIN_OPEN_SCORE
+    current_strats = strategy_state.load()
+
+    analysts_available = ["Claude"]
+    if openai_client:  analysts_available.append("GPT-4o")
+    if gemini_model:   analysts_available.append("Gemini")
 
     log.info(
         f"Analyzing {stats['total_trades']} closed trades | "
-        f"Win rate: {stats['win_rate']}% | "
-        f"PnL: {stats['total_pnl']} USDT"
+        f"Win rate: {stats['win_rate']}% | PnL: {stats['total_pnl']} USDT | "
+        f"Analysts: {', '.join(analysts_available)}"
     )
 
     prompt = _build_context(stats, recent_trades, current_score, current_strats)
 
-    response = client.messages.parse(
-        model="claude-opus-4-6",
-        max_tokens=2048,
-        thinking={"type": "adaptive"},
-        system=(
-            "You are an expert quantitative trading analyst. "
-            "Analyze crypto futures bot performance and recommend conservative, "
-            "data-driven parameter adjustments. Be precise and concise."
-        ),
-        messages=[{"role": "user", "content": prompt}],
-        output_format=AnalysisResult,
-    )
+    # ---- Run all AIs in parallel ----
+    tasks: dict[str, callable] = {"Claude": lambda: _analyse_with_claude(claude_client, prompt)}
+    if openai_client:
+        tasks["GPT-4o"] = lambda: _analyse_with_openai(openai_client, prompt)
+    if gemini_model:
+        tasks["Gemini"] = lambda: _analyse_with_gemini(gemini_model, prompt)
 
-    result: AnalysisResult | None = response.parsed_output
-    if result is None:
-        log.error("Claude returned no structured output — skipping.")
+    results: list[tuple[str, AnalysisResult]] = []
+    with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
+        futures = {pool.submit(fn): name for name, fn in tasks.items()}
+        for future in as_completed(futures):
+            name = futures[future]
+            try:
+                result = future.result()
+                results.append((name, result))
+                log.info(
+                    f"[{name}] adjust={result.should_adjust} | "
+                    f"score→{result.score_adjustment.new_value if result.score_adjustment else 'no change'} | "
+                    f"{result.summary[:100]}"
+                )
+            except Exception as e:
+                log.warning(f"[{name}] analysis failed: {e}")
+
+    if not results:
+        log.error("All analysts failed — skipping this cycle.")
         return
 
-    _log_to_file(result, current_score, current_strats)
+    # ---- Build consensus ----
+    consensus = _build_consensus(results, current_score)
+    _log_to_file(results, consensus, current_score, current_strats)
 
-    if not result.should_adjust:
-        log.info(f"Analyst: no changes. {result.wait_reason or result.summary[:120]}")
+    if not consensus.should_adjust:
+        log.info(f"Consensus: no changes recommended.")
         return
 
-    log.info(f"Analyst summary: {result.summary[:200]}")
+    log.info(f"Consensus summary: {consensus.summary[:300]}")
 
     # ---- Apply score adjustment ----
-    if result.score_adjustment is not None:
-        new_score = max(SCORE_BOUNDS[0], min(SCORE_BOUNDS[1], result.score_adjustment.new_value))
+    if consensus.score_adjustment is not None:
+        new_score = max(SCORE_BOUNDS[0], min(SCORE_BOUNDS[1], consensus.score_adjustment.new_value))
         if new_score != current_score:
             strategy_scanner.MIN_OPEN_SCORE = new_score
             log.info(
-                f"Analyst: MIN_OPEN_SCORE {current_score} → {new_score} | "
-                f"{result.score_adjustment.reason}"
+                f"Consensus: MIN_OPEN_SCORE {current_score} → {new_score} | "
+                f"{consensus.score_adjustment.reason}"
             )
         else:
-            log.info(f"Analyst: score stays at {current_score} (clamped or unchanged).")
+            log.info(f"Consensus: score stays at {current_score} (clamped or unchanged).")
 
     # ---- Apply symbol strategy adjustments ----
     valid_strategies = {"auto", "sniper", "lsob", "scalp", "trend", "fvg"}
-    for adj in result.symbol_adjustments:
+    for adj in consensus.symbol_adjustments:
         if adj.symbol not in config.SYMBOLS:
-            log.warning(f"Analyst: unknown symbol '{adj.symbol}' — skipping.")
+            log.warning(f"Consensus: unknown symbol '{adj.symbol}' — skipping.")
             continue
         if adj.strategy not in valid_strategies:
-            log.warning(f"Analyst: unknown strategy '{adj.strategy}' — skipping.")
+            log.warning(f"Consensus: unknown strategy '{adj.strategy}' — skipping.")
             continue
         prev = strategy_state.get_strategy(adj.symbol)
         if prev != adj.strategy:
             strategy_state.set_strategy(adj.symbol, adj.strategy)
             log.info(
-                f"Analyst: {adj.symbol} {prev.upper()} → {adj.strategy.upper()} | "
+                f"Consensus: {adj.symbol} {prev.upper()} → {adj.strategy.upper()} | "
                 f"{adj.reason}"
             )
 
 
-def _log_to_file(result: AnalysisResult, prev_score: int, prev_strats: dict) -> None:
-    """Append the analysis result to analyst.log."""
+def _log_to_file(
+    results: list[tuple[str, AnalysisResult]],
+    consensus: AnalysisResult,
+    prev_score: int,
+    prev_strats: dict,
+) -> None:
+    """Append all individual analyses + consensus to analyst.log."""
     try:
         with open("analyst.log", "a", encoding="utf-8") as f:
             ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
-            f.write(f"\n{'='*60}\n  ANALYSIS  {ts}\n{'='*60}\n")
-            f.write(f"Summary: {result.summary}\n\n")
-            f.write(f"Adjustments applied: {result.should_adjust}\n")
-            if result.wait_reason:
-                f.write(f"Reason for no change: {result.wait_reason}\n")
-            if result.score_adjustment:
+            f.write(f"\n{'='*60}\n  MULTI-AI ANALYSIS  {ts}\n{'='*60}\n")
+
+            # Individual AI results
+            for name, r in results:
+                f.write(f"\n--- {name} ---\n")
+                f.write(f"Summary: {r.summary}\n")
+                f.write(f"Adjust: {r.should_adjust}")
+                if r.wait_reason:
+                    f.write(f" | Wait: {r.wait_reason}")
+                f.write("\n")
+                if r.score_adjustment:
+                    f.write(f"  Score: {prev_score} → {r.score_adjustment.new_value} | {r.score_adjustment.reason}\n")
+                for adj in r.symbol_adjustments:
+                    prev = prev_strats.get(adj.symbol, "?")
+                    f.write(f"  {adj.symbol}: {prev} → {adj.strategy} | {adj.reason}\n")
+
+            # Consensus
+            f.write(f"\n--- CONSENSUS ---\n")
+            f.write(f"Adjust: {consensus.should_adjust}\n")
+            if consensus.score_adjustment:
                 f.write(
-                    f"Score: {prev_score} → {result.score_adjustment.new_value} "
-                    f"| {result.score_adjustment.reason}\n"
+                    f"  Score: {prev_score} → {consensus.score_adjustment.new_value} "
+                    f"| {consensus.score_adjustment.reason}\n"
                 )
-            for adj in result.symbol_adjustments:
+            for adj in consensus.symbol_adjustments:
                 prev = prev_strats.get(adj.symbol, "?")
                 f.write(f"  {adj.symbol}: {prev} → {adj.strategy} | {adj.reason}\n")
             f.write("\n")
@@ -315,27 +505,56 @@ def _log_to_file(result: AnalysisResult, prev_score: int, prev_strats: dict) -> 
 def run_analysis_loop(stop_event: threading.Event) -> None:
     """
     Background thread: waits STARTUP_DELAY_MINUTES, then analyzes every
-    ANALYSIS_INTERVAL_MINUTES. Skips gracefully on any error.
+    ANALYSIS_INTERVAL_MINUTES. Initialises all available AI clients on startup.
     """
     log.info(
         f"Trade Analyst started — first run in {STARTUP_DELAY_MINUTES} min, "
         f"then every {ANALYSIS_INTERVAL_MINUTES} min."
     )
 
-    # Initial startup delay
     stop_event.wait(STARTUP_DELAY_MINUTES * 60)
     if stop_event.is_set():
         return
 
+    # ---- Initialise Claude (required) ----
     try:
-        client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from env
+        claude_client = anthropic.Anthropic()
     except Exception as e:
         log.error(f"Could not create Anthropic client: {e}. Trade Analyst disabled.")
         return
 
+    # ---- Initialise GPT-4o (optional) ----
+    openai_client = None
+    openai_key = os.getenv("OPENAI_API_KEY", "")
+    if _OPENAI_AVAILABLE and openai_key:
+        try:
+            openai_client = _openai_module.OpenAI(api_key=openai_key)
+            log.info("GPT-4o analyst: enabled.")
+        except Exception as e:
+            log.warning(f"GPT-4o init failed: {e}")
+    elif not openai_key:
+        log.info("GPT-4o analyst: disabled (OPENAI_API_KEY not set).")
+    else:
+        log.info("GPT-4o analyst: disabled (openai package not installed).")
+
+    # ---- Initialise Gemini (optional) ----
+    gemini_model = None
+    gemini_key = os.getenv("GOOGLE_API_KEY", "")
+    if _GEMINI_AVAILABLE and gemini_key:
+        try:
+            genai.configure(api_key=gemini_key)
+            gemini_model = genai.GenerativeModel("gemini-2.0-flash")
+            log.info("Gemini analyst: enabled.")
+        except Exception as e:
+            log.warning(f"Gemini init failed: {e}")
+    elif not gemini_key:
+        log.info("Gemini analyst: disabled (GOOGLE_API_KEY not set).")
+    else:
+        log.info("Gemini analyst: disabled (google-generativeai package not installed).")
+
     while not stop_event.is_set():
         try:
-            _run_single_analysis(client)
+            _run_analysis_cycle(claude_client, openai_client, gemini_model)
         except anthropic.AuthenticationError:
             log.error("Invalid ANTHROPIC_API_KEY — Trade Analyst disabled.")
             return
