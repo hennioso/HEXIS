@@ -61,40 +61,77 @@ class BitunixClient:
             "timestamp": timestamp,
         }
 
-    def _get(self, path: str, params: dict = None, _retries: int = 2) -> dict:
+    def _backoff(self, attempt: int, rate_limited: bool = False) -> float:
+        """Exponential backoff: 1s, 2s, 4s. Rate limit: 10s, 20s, 40s."""
+        base = 10 if rate_limited else 1
+        return min(base * (2 ** attempt), 60)
+
+    def _get(self, path: str, params: dict = None, _retries: int = 3) -> dict:
         headers = self._auth_headers(query_params=params)
         url = BASE_URL + path
         for attempt in range(_retries + 1):
             try:
                 response = self.session.get(url, params=params, headers=headers, timeout=20)
+
+                if response.status_code == 429:
+                    # Rate limited — back off longer, then retry
+                    if attempt < _retries:
+                        time.sleep(self._backoff(attempt, rate_limited=True))
+                        headers = self._auth_headers(query_params=params)
+                        continue
+                    response.raise_for_status()
+
+                if response.status_code >= 500:
+                    # Server error — retry with backoff
+                    if attempt < _retries:
+                        time.sleep(self._backoff(attempt))
+                        headers = self._auth_headers(query_params=params)
+                        continue
+                    response.raise_for_status()
+
                 response.raise_for_status()
                 data = response.json()
                 if data.get("code") != 0:
                     raise RuntimeError(f"Bitunix API Error [{data.get('code')}]: {data.get('msg')}")
                 return data
-            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
                 if attempt < _retries:
-                    time.sleep(2)
-                    headers = self._auth_headers(query_params=params)  # fresh signature
+                    time.sleep(self._backoff(attempt))
+                    headers = self._auth_headers(query_params=params)
                     continue
                 raise
 
-    def _post(self, path: str, body: dict, _retries: int = 2) -> dict:
+    def _post(self, path: str, body: dict, _retries: int = 3) -> dict:
         headers = self._auth_headers(body=body)
         url = BASE_URL + path
         body_str = json.dumps(body, separators=(",", ":"))
         for attempt in range(_retries + 1):
             try:
                 response = self.session.post(url, data=body_str, headers=headers, timeout=20)
+
+                if response.status_code == 429:
+                    if attempt < _retries:
+                        time.sleep(self._backoff(attempt, rate_limited=True))
+                        headers = self._auth_headers(body=body)
+                        continue
+                    response.raise_for_status()
+
+                if response.status_code >= 500:
+                    if attempt < _retries:
+                        time.sleep(self._backoff(attempt))
+                        headers = self._auth_headers(body=body)
+                        continue
+                    response.raise_for_status()
+
                 response.raise_for_status()
                 data = response.json()
                 if data.get("code") != 0:
                     raise RuntimeError(f"Bitunix API Error [{data.get('code')}]: {data.get('msg')}")
                 return data
-            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
                 if attempt < _retries:
-                    time.sleep(2)
-                    headers = self._auth_headers(body=body)  # fresh signature
+                    time.sleep(self._backoff(attempt))
+                    headers = self._auth_headers(body=body)
                     continue
                 raise
 

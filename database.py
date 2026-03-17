@@ -50,8 +50,10 @@ def init_db():
         _add_column_if_missing(conn, "trades", "be_moved",        "INTEGER DEFAULT 0")
         _add_column_if_missing(conn, "trades", "unrealized_pnl",  "REAL")
         _add_column_if_missing(conn, "trades", "partial_pnl_usdt","REAL")
-        _add_column_if_missing(conn, "trades", "margin_usdt",     "REAL")
-        _add_column_if_missing(conn, "trades", "leverage",        "INTEGER")
+        _add_column_if_missing(conn, "trades", "margin_usdt",      "REAL")
+        _add_column_if_missing(conn, "trades", "leverage",         "INTEGER")
+        _add_column_if_missing(conn, "trades", "trail_activated",  "INTEGER DEFAULT 0")
+        _add_column_if_missing(conn, "trades", "trail_stop",       "REAL")
         conn.commit()
 
 
@@ -299,6 +301,39 @@ def correct_closed_trade(trade_id: str, exit_price: float, pnl_usdt: float, clos
             (exit_price, round(pnl_usdt, 4), close_time, trade_id),
         )
         conn.commit()
+
+
+def set_trail_stop(trade_id: str, trail_price: float):
+    """Activate or update the trailing stop price for a trade."""
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE trades SET trail_activated=1, trail_stop=? WHERE trade_id=?",
+            (round(trail_price, 8), trade_id),
+        )
+        conn.commit()
+
+
+def get_hourly_stats() -> list[dict]:
+    """Win rate and trade count per UTC hour (0–23). Used by AI Trade Analyst."""
+    with _connect() as conn:
+        rows = conn.execute(
+            """SELECT
+                   CAST(strftime('%H', exit_time) AS INTEGER) AS hour,
+                   COUNT(*) AS trades,
+                   SUM(CASE WHEN pnl_usdt > 0 THEN 1 ELSE 0 END) AS wins
+               FROM trades
+               WHERE status != 'open' AND pnl_usdt IS NOT NULL AND exit_time IS NOT NULL
+               GROUP BY hour
+               ORDER BY hour"""
+        ).fetchall()
+        return [
+            {
+                "hour_utc": r["hour"],
+                "trades":   r["trades"],
+                "win_rate": round(r["wins"] / r["trades"] * 100, 1),
+            }
+            for r in rows
+        ]
 
 
 def mark_sniper_be_moved(trade_id: str, new_sl: float):

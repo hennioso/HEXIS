@@ -129,10 +129,11 @@ def _build_context(
         if t["status"] != "open"
     ][:20]
 
-    # Drawdown metrics
-    analytics   = db.get_analytics()
-    drawdown    = analytics.get("drawdown", {})
-    streak      = _compute_streak(recent_trades)
+    # Drawdown metrics + hourly distribution
+    analytics    = db.get_analytics()
+    drawdown     = analytics.get("drawdown", {})
+    streak       = _compute_streak(recent_trades)
+    hourly_stats = db.get_hourly_stats()
 
     return f"""You are a quantitative trading analyst evaluating HEXIS, an autonomous crypto futures agent on Bitunix.
 
@@ -173,6 +174,9 @@ def _build_context(
 ## Last 20 Closed Trades
 {json.dumps(last_20, indent=2)}
 
+## Hourly Performance (UTC)
+{json.dumps(hourly_stats, indent=2) if hourly_stats else "Insufficient data for hourly breakdown."}
+
 ## Your Task
 Analyze the performance data and produce recommendations for exactly two things:
 
@@ -187,6 +191,10 @@ Analyze the performance data and produce recommendations for exactly two things:
    - Set back to "auto" if a pinned strategy is underperforming
    - No change if data is insufficient or mixed
    - Valid values: auto | sniper | lsob | scalp | trend | fvg
+
+3. **Time-of-day filter** (optional recommendation only — not auto-applied):
+   - If certain UTC hours show consistently low win rate with ≥5 trades, flag them in your summary
+   - This is advisory only; no parameter change is needed
 
 Be conservative. If in doubt, recommend no change. Stability is valuable.
 Explain your reasoning clearly with reference to the numbers."""

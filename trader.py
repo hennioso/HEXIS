@@ -705,6 +705,186 @@ class Trader:
             logger.error(f"FVG order failed: {e}")
             return None
 
+    def _price_precision(self, price: float) -> int:
+        if price >= 10_000: return 1
+        if price >= 100:    return 2
+        if price >= 1:      return 4
+        return 5
+
+    def monitor_open_position(self) -> None:
+        """
+        Generic per-tick monitor — dispatches to the right handler based on
+        the open trade's strategy. Call this instead of monitor_sniper_tps()
+        for all strategies.
+        """
+        trade_id = self._current_trade_id
+        if not trade_id:
+            return
+        trade = db.get_trade(trade_id)
+        if not trade:
+            return
+        strategy = (trade.get("strategy") or "").lower()
+        if strategy == "sniper":
+            self.monitor_sniper_tps()
+        elif strategy in ("lsob", "fvg"):
+            self.monitor_position_be()
+        else:
+            self.monitor_position_trailing()
+
+    def monitor_position_be(self) -> None:
+        """
+        Break-Even stop for LSOB and FVG positions.
+        When price covers 50% of the TP distance in the right direction,
+        the SL is moved to the entry price (on exchange + in DB).
+        """
+        trade_id = self._current_trade_id
+        if not trade_id:
+            return
+        trade = db.get_trade(trade_id)
+        if not trade or trade.get("be_moved"):
+            return
+
+        try:
+            ticker = self.client.get_ticker(self.symbol)
+            price  = float(ticker.get("lastPrice", ticker.get("close", 0)))
+        except Exception:
+            return
+        if not price:
+            return
+
+        direction   = trade["direction"]
+        entry_price = float(trade["entry_price"])
+        tp_price    = float(trade.get("tp_price") or 0)
+        if not tp_price:
+            return
+
+        tp_dist    = abs(tp_price - entry_price)
+        price_move = price - entry_price if direction == "long" else entry_price - price
+        if tp_dist == 0 or price_move / tp_dist < 0.50:
+            return
+
+        # Price has covered ≥50% of TP distance — move SL to entry
+        be_str = str(round(entry_price, self._price_precision(entry_price)))
+        exchange_moved = False
+        try:
+            pos = self.refresh_position()
+            if pos:
+                pid = str(pos.get("positionId", ""))
+                if pid:
+                    self.client.modify_position_sl(
+                        symbol=self.symbol, position_id=pid, sl_price=be_str
+                    )
+                    exchange_moved = True
+        except Exception as e:
+            logger.warning(f"BE exchange move failed: {e} — software stop armed")
+
+        strat = (trade.get("strategy") or "").upper()
+        if exchange_moved:
+            logger.info(f"{strat} BE moved on exchange | {self.symbol} | SL → {be_str}")
+        else:
+            logger.info(f"{strat} BE armed (software) | {self.symbol} | Stop at {be_str}")
+
+        db.mark_sniper_be_moved(trade_id, entry_price)
+
+    def monitor_position_trailing(self) -> None:
+        """
+        Trailing stop for TREND and SCALP positions.
+        Activates when price covers 60% of the TP distance, then trails at
+        the original SL distance from the current best price.
+        Closes the position if price retraces to the trailing stop level.
+        """
+        trade_id = self._current_trade_id
+        if not trade_id:
+            return
+        trade = db.get_trade(trade_id)
+        if not trade:
+            return
+
+        try:
+            ticker = self.client.get_ticker(self.symbol)
+            price  = float(ticker.get("lastPrice", ticker.get("close", 0)))
+        except Exception:
+            return
+        if not price:
+            return
+
+        direction       = trade["direction"]
+        entry_price     = float(trade["entry_price"])
+        tp_price        = float(trade.get("tp_price")  or 0)
+        sl_price        = float(trade.get("sl_price")  or 0)
+        trail_activated = bool(trade.get("trail_activated", 0))
+        trail_stop      = float(trade.get("trail_stop")  or 0)
+
+        if not tp_price or not sl_price:
+            return
+
+        tp_dist  = abs(tp_price - entry_price)
+        sl_dist  = abs(sl_price - entry_price)   # trailing distance
+        if tp_dist == 0 or sl_dist == 0:
+            return
+
+        price_move = price - entry_price if direction == "long" else entry_price - price
+        close_side = "SELL" if direction == "long" else "BUY"
+
+        if not trail_activated:
+            # Activate trailing stop once 60% of TP distance is covered
+            if price_move / tp_dist >= 0.60:
+                new_trail = (
+                    round(price - sl_dist, 8) if direction == "long"
+                    else round(price + sl_dist, 8)
+                )
+                db.set_trail_stop(trade_id, new_trail)
+                logger.info(
+                    f"TRAIL activated | {self.symbol} | "
+                    f"Price: {price:.4f} | Trailing stop: {new_trail:.4f}"
+                )
+            return
+
+        # Update trailing stop if price has moved further in our favour
+        if direction == "long":
+            new_trail = round(price - sl_dist, 8)
+            if new_trail > trail_stop:
+                db.set_trail_stop(trade_id, new_trail)
+                trail_stop = new_trail
+                logger.debug(f"TRAIL updated | {self.symbol} | Stop → {trail_stop:.4f}")
+            # Close if price drops to trailing stop
+            if price <= trail_stop:
+                logger.info(
+                    f"TRAIL triggered | {self.symbol} | "
+                    f"Price {price:.4f} ≤ stop {trail_stop:.4f} → closing"
+                )
+                self._trail_close(trade_id, close_side)
+        else:
+            new_trail = round(price + sl_dist, 8)
+            if new_trail < trail_stop:
+                db.set_trail_stop(trade_id, new_trail)
+                trail_stop = new_trail
+                logger.debug(f"TRAIL updated | {self.symbol} | Stop → {trail_stop:.4f}")
+            # Close if price rises to trailing stop
+            if price >= trail_stop:
+                logger.info(
+                    f"TRAIL triggered | {self.symbol} | "
+                    f"Price {price:.4f} ≥ stop {trail_stop:.4f} → closing"
+                )
+                self._trail_close(trade_id, close_side)
+
+    def _trail_close(self, trade_id: str, close_side: str) -> None:
+        """Market-close the full remaining position when trailing stop is hit."""
+        try:
+            pos = self.refresh_position()
+            if pos:
+                self.client.place_order(
+                    symbol=self.symbol,
+                    side=close_side,
+                    trade_side="OPEN",
+                    qty=_qty_str(float(pos.get("qty", "0"))),
+                    order_type="MARKET",
+                    reduce_only=True,
+                )
+                self._sync_closed_position(trade_id)
+        except Exception as e:
+            logger.error(f"TRAIL close failed: {e}")
+
     def monitor_sniper_tps(self) -> None:
         """
         Called every loop tick when a SNIPER position is open.

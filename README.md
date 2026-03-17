@@ -26,11 +26,14 @@ An autonomous futures trading agent for the **Bitunix** exchange. Trades multipl
   - `fvg` — Fair Value Gap retest (price imbalance entries in trend direction)
 - **Agent Mode** — global scanner evaluates all 7 symbols × 5 strategies (35 combos) per tick, opens only the single best-scoring setup above a configurable threshold
 - **Fixed fractional risk sizing** — position size based on % account risk / SL distance
+- **Break-Even stop** — LSOB and FVG positions automatically move SL to entry after covering 50% of TP distance
+- **Trailing stop** — TREND and SCALP positions activate a trailing stop at 60% of TP distance, trailing at the original SL distance
 - **Learning phase** — margin capped at 25 USDT for the first 10 trades
 
 ### AI Trade Analyst
 - **Claude-powered analysis** — reads last 100 closed trades every 4 hours and auto-adjusts the score threshold and per-symbol strategies based on actual performance
-- **Context-aware prompt** — includes drawdown metrics, current win/loss streak, per-strategy and per-symbol breakdown
+- **Context-aware prompt** — includes drawdown metrics, current win/loss streak, per-strategy and per-symbol breakdown, and hourly UTC performance distribution
+- **Time-of-day insight** — flags UTC hours with consistently low win rate (advisory, not auto-applied)
 - **Safety guards** — never adjusts while positions are open, requires min. 5 closed trades
 - **All 5 strategies** are known to the analyst — can pin or unpin any symbol to/from FVG, SNIPER, LSOB, SCALP, TREND, or AUTO
 

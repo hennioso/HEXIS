@@ -82,9 +82,7 @@ def symbol_loop(
                     f"Qty: {pos.get('qty')} | "
                     f"uPNL: {pos.get('unrealizedPNL', 'N/A')}"
                 )
-                # SNIPER / AUTO→SNIPER: monitor partial TP levels every tick
-                if strategy == "sniper":
-                    trader.monitor_sniper_tps()
+                trader.monitor_open_position()
             elif strategy == "sniper":
                 # SNIPER uses 15m candles with longer lookback for meaningful swings
                 klines_sniper = client.get_klines(
@@ -249,7 +247,7 @@ def agent_scanner_loop(
                         f"{sym} | Position open | Side: {pos.get('side')} | "
                         f"Qty: {pos.get('qty')} | uPNL: {pos.get('unrealizedPNL', 'N/A')}"
                     )
-                    trader.monitor_sniper_tps()
+                    trader.monitor_open_position()
 
             # ---- 3. Find candidates (AUTO + no open position) ----
             candidates = [
