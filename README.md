@@ -30,8 +30,13 @@ An autonomous futures trading agent for the **Bitunix** exchange. Trades multipl
 - **Trailing stop** — TREND and SCALP positions activate a trailing stop at 60% of TP distance, trailing at the original SL distance
 - **Learning phase** — margin capped at 25 USDT for the first 10 trades
 
-### AI Trade Analyst
-- **Claude-powered analysis** — reads last 100 closed trades every 4 hours and auto-adjusts the score threshold and per-symbol strategies based on actual performance
+### AI Trade Analyst (Multi-Model Consensus)
+- **Three-AI panel** — Claude (Opus 4.6), GPT-4o, and Gemini analyze independently in parallel, then form a consensus
+  - Claude: conservative quant focus (extended thinking enabled)
+  - GPT-4o: risk management and drawdown focus *(requires `OPENAI_API_KEY`)*
+  - Gemini: pattern recognition and strategy correlation *(requires `GOOGLE_API_KEY`)*
+- **Consensus logic** — `MIN_OPEN_SCORE` is the rounded average of all AI recommendations; per-symbol strategy changes require a majority vote (≥2 AIs)
+- **Graceful degradation** — runs with Claude alone if OpenAI/Google keys are not set
 - **Context-aware prompt** — includes drawdown metrics, current win/loss streak, per-strategy and per-symbol breakdown, and hourly UTC performance distribution
 - **Time-of-day insight** — flags UTC hours with consistently low win rate (advisory, not auto-applied)
 - **Safety guards** — never adjusts while positions are open, requires min. 5 closed trades
@@ -86,6 +91,8 @@ An autonomous futures trading agent for the **Bitunix** exchange. Trades multipl
 | Python | 3.10+ |
 | Bitunix account | Futures trading enabled, API key with Read + Trade permissions |
 | Anthropic API key | Required for AI Trade Analyst — [console.anthropic.com](https://console.anthropic.com) |
+| OpenAI API key | Optional — enables GPT-4o as second analyst — [platform.openai.com](https://platform.openai.com) |
+| Google AI API key | Optional — enables Gemini as third analyst — [aistudio.google.com](https://aistudio.google.com) |
 | Telegram bot | Optional — for trade notifications |
 
 ### Estimated running costs
@@ -93,7 +100,9 @@ An autonomous futures trading agent for the **Bitunix** exchange. Trades multipl
 | Service | Cost |
 |---|---|
 | Bitunix trading fees | ~0.02% per trade (maker/taker) |
-| Anthropic API (AI Analyst) | ~$3/month at default 4h interval with claude-opus-4-6 |
+| Anthropic API (Claude) | ~$3/month at default 4h interval with claude-opus-4-6 |
+| OpenAI API (GPT-4o, optional) | ~$2–4/month at default 4h interval |
+| Google AI API (Gemini, optional) | ~$1/month at default 4h interval |
 | Server / VPS | Optional — can run locally; a small VPS (~$5/month) ensures 24/7 uptime |
 
 > The $5 Anthropic free credit covers roughly 2 weeks at the default interval. To reduce costs, increase `ANALYSIS_INTERVAL_MINUTES` in `trade_analyst.py` or switch to `claude-haiku-4-5` (~$0.20/month).
@@ -273,7 +282,11 @@ Price imbalance entry in the direction of the original impulse:
 **What it does:**
 - Runs every **4 hours** (first run 30 minutes after startup)
 - Reads the last 100 closed trades from the database
-- Calls Claude (claude-opus-4-6 with extended thinking) to analyze win rates, PnL per strategy/symbol, drawdown, and current streak
+- Dispatches analysis **in parallel** to all configured AI models:
+  - **Claude** (claude-opus-4-6, extended thinking) — always active; conservative quant perspective
+  - **GPT-4o** (optional, set `OPENAI_API_KEY`) — risk management and drawdown focus
+  - **Gemini** (optional, set `GOOGLE_API_KEY`) — pattern recognition and strategy correlation
+- Forms a **consensus**: rounded average for `MIN_OPEN_SCORE`, majority vote (≥2 AIs) for symbol strategy changes
 - Applies structured recommendations automatically
 
 **What it adjusts:**
@@ -283,8 +296,9 @@ Price imbalance entry in the direction of the original impulse:
 **Safety:**
 - Never adjusts while any position is open
 - Requires at least 5 closed trades before first analysis
-- All decisions logged to `analyst.log` with full reasoning
+- Each AI's individual reasoning + the final consensus are logged to `analyst.log`
 - "No change" is always a valid recommendation
+- Gracefully falls back to Claude-only analysis if OpenAI/Google keys are absent
 
 ---
 
