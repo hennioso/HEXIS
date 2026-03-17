@@ -11,7 +11,7 @@ import threading
 import config
 
 _STATE_FILE = "strategies.json"
-_VALID = {"trend", "scalp", "sniper", "lsob", "auto"}
+_VALID = {"trend", "scalp", "sniper", "lsob", "fvg", "auto"}
 _lock = threading.Lock()
 
 

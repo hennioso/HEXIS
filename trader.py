@@ -12,6 +12,7 @@ from strategy import Signal
 from risk_manager import RiskManager, TradeParams
 from strategy_sniper import SniperSignal
 from strategy_lsob import LSOBSignal
+from strategy_fvg import FVGSignal
 import database as db
 import notifications
 import circuit_breaker
@@ -566,6 +567,142 @@ class Trader:
             return result
         except Exception as e:
             logger.error(f"LSOB order failed: {e}")
+            return None
+
+    def open_fvg_position(self, fvg: FVGSignal) -> Optional[dict]:
+        """
+        Opens a Fair Value Gap position.
+        Entry at market when price is inside an unfilled FVG zone.
+        SL is placed structurally beyond the gap boundary.
+        TP is a measured move of 2× the gap size.
+        """
+        ok, reason = circuit_breaker.is_trading_allowed("fvg")
+        if not ok:
+            logger.warning(f"Circuit breaker blocked FVG: {reason}")
+            return None
+
+        if self.has_open_position():
+            logger.warning("Position already open – skipping FVG trade.")
+            return None
+
+        existing = [t for t in db.get_all_trades(limit=20)
+                    if t["status"] == "open" and t["symbol"] == self.symbol]
+        if existing:
+            logger.warning(f"DB already has an open trade for {self.symbol} – skipping FVG.")
+            return None
+
+        balance = self.get_available_balance()
+        if balance < 10:
+            logger.error(f"Insufficient capital: {balance:.2f} USDT")
+            return None
+
+        trade_count  = db.get_trade_count()
+        entry_price  = fvg.price
+
+        # Dynamic price precision
+        if entry_price >= 10_000:
+            price_prec = 1
+        elif entry_price >= 100:
+            price_prec = 2
+        elif entry_price >= 1:
+            price_prec = 4
+        else:
+            price_prec = 5
+
+        # Size by structural SL distance
+        risk_usdt = balance * self.rm.risk_per_trade
+        sl_dist   = abs(entry_price - fvg.sl_price)
+        if sl_dist == 0:
+            return None
+        qty = round(risk_usdt / sl_dist, self.rm.qty_precision)
+
+        # Hard margin cap
+        max_qty_margin = round(
+            (balance * self.rm.max_margin_pct * self.rm.leverage) / entry_price,
+            self.rm.qty_precision,
+        )
+        if qty > max_qty_margin:
+            qty = max_qty_margin
+
+        # Learning phase cap
+        if (
+            self.rm.max_margin_usdt is not None
+            and self.rm.max_margin_trades > 0
+            and trade_count < self.rm.max_margin_trades
+        ):
+            max_qty = round(
+                (self.rm.max_margin_usdt * self.rm.leverage) / entry_price,
+                self.rm.qty_precision,
+            )
+            if qty > max_qty:
+                qty = max_qty
+
+        if qty < self.rm.min_qty:
+            logger.warning("FVG position size too small – skipping.")
+            return None
+
+        max_notional = balance * self.rm.leverage
+        if qty * entry_price > max_notional:
+            qty = round(max_notional / entry_price, self.rm.qty_precision)
+            if qty < self.rm.min_qty:
+                return None
+
+        side     = "BUY" if fvg.direction == "long" else "SELL"
+        trade_id = f"fvg_{uuid.uuid4().hex[:16]}"
+        sl_str   = str(round(fvg.sl_price, price_prec))
+        tp_str   = str(round(fvg.tp_price, price_prec))
+
+        logger.info(
+            f"FVG OPEN | {fvg.direction.upper()} | "
+            f"Qty: {qty} | Entry: {entry_price:.4f} | "
+            f"Gap: [{fvg.fvg_bottom:.4f}–{fvg.fvg_top:.4f}] ({fvg.gap_pct*100:.2f}%) | "
+            f"Age: {fvg.candle_age} candles | "
+            f"SL: {sl_str} | TP: {tp_str}"
+        )
+
+        try:
+            result = self.client.place_order(
+                symbol=self.symbol,
+                side=side,
+                trade_side="OPEN",
+                qty=_qty_str(qty),
+                order_type="MARKET",
+                sl_price=sl_str,
+                tp_price=tp_str,
+                client_id=trade_id,
+            )
+            order_id = result.get("orderId", "")
+            logger.info(f"FVG order placed: {result}")
+
+            db.open_trade(
+                trade_id=trade_id,
+                order_id=order_id,
+                symbol=self.symbol,
+                direction=fvg.direction,
+                qty=float(qty),
+                entry_price=entry_price,
+                tp_price=fvg.tp_price,
+                sl_price=fvg.sl_price,
+                strategy="fvg",
+            )
+            self._current_trade_id = trade_id
+            # Store gap boundary as re-entry guard
+            if fvg.direction == "long":
+                self._last_sniper_swing = (fvg.fvg_top, fvg.fvg_bottom)
+            else:
+                self._last_sniper_swing = (fvg.fvg_top, fvg.fvg_bottom)
+            notifications.send_trade_open(
+                symbol=self.symbol,
+                direction=fvg.direction,
+                strategy="fvg",
+                entry=entry_price,
+                tp=fvg.tp_price,
+                sl=fvg.sl_price,
+                qty=float(qty),
+            )
+            return result
+        except Exception as e:
+            logger.error(f"FVG order failed: {e}")
             return None
 
     def monitor_sniper_tps(self) -> None:

@@ -62,6 +62,10 @@ FIB_STOP_LOSS_PCT   = float(os.getenv("FIB_STOP_LOSS_PCT",  "0.015"))           
 FIB_TAKE_PROFIT_PCT = float(os.getenv("FIB_TAKE_PROFIT_PCT", "0.030"))          # 3.0% TP (2:1 R:R)
 # Deep levels (0.882): SL is placed structurally at swing low/high ± 0.2%
 
+# ---- FVG Strategy Parameters (Fair Value Gap) ------------------------------
+FVG_TF          = os.getenv("FVG_TF", "15m")             # 15m for meaningful gap sizes
+FVG_KLINE_LIMIT = int(os.getenv("FVG_KLINE_LIMIT", "120"))
+
 # ---- LSOB Strategy Parameters (Liquidity Sweep Orderblock) ----------------
 LSOB_TF          = os.getenv("LSOB_TF", "15m")
 LSOB_KLINE_LIMIT = int(os.getenv("LSOB_KLINE_LIMIT", "120"))

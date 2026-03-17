@@ -30,6 +30,21 @@ import database as db
 import strategy_scanner
 import strategy_state
 
+
+def _compute_streak(recent_trades: list[dict]) -> dict:
+    """Current win/loss streak from the most recent closed trades."""
+    closed = [t for t in recent_trades if t["status"] != "open" and t.get("pnl_usdt") is not None]
+    if not closed:
+        return {"type": "none", "length": 0}
+    streak_type = "win" if closed[0]["pnl_usdt"] > 0 else "loss"
+    length = 0
+    for t in closed:
+        if (t["pnl_usdt"] > 0) == (streak_type == "win"):
+            length += 1
+        else:
+            break
+    return {"type": streak_type, "length": length}
+
 log = logging.getLogger("TradeAnalyst")
 
 # ---- Configuration -----------------------------------------------------------
@@ -114,9 +129,14 @@ def _build_context(
         if t["status"] != "open"
     ][:20]
 
-    return f"""You are a quantitative trading analyst evaluating HEXIS, an autonomous crypto futures bot on Bitunix.
+    # Drawdown metrics
+    analytics   = db.get_analytics()
+    drawdown    = analytics.get("drawdown", {})
+    streak      = _compute_streak(recent_trades)
 
-## Bot Setup
+    return f"""You are a quantitative trading analyst evaluating HEXIS, an autonomous crypto futures agent on Bitunix.
+
+## Agent Setup
 - Symbols: {config.SYMBOLS}
 - Leverage: {config.LEVERAGE}x | Risk per trade: {config.RISK_PER_TRADE*100:.0f}% of balance
 - Agent Scanner: scores all (symbol × strategy) combos every 15s, opens order only if best score ≥ MIN_OPEN_SCORE
@@ -125,20 +145,24 @@ def _build_context(
 - SNIPER (Fibonacci 0.882 retracement): max 10
 - LSOB (Liquidity Sweep Orderblock):    max  9
 - SCALP (BB + RSI extremes + volume):   max  9
+- FVG  (Fair Value Gap retest):         max  9
 - TREND (EMA 9/21/50 alignment):        max  7
   → Note: TREND can never reach a threshold of 8+, so raising score to 8 excludes TREND entries.
+  → FVG: price retesting an unfilled 3-candle imbalance zone in the trend direction.
 
 ## Current Configuration
 - MIN_OPEN_SCORE: {current_score}/10
 - Per-symbol strategies: {json.dumps(current_strategies, indent=2)}
 
 ## Overall Performance ({stats['total_trades']} closed trades)
-- Win rate:   {stats['win_rate']}%
-- Total PnL:  {stats['total_pnl']} USDT
-- Avg win:    {stats['avg_win']} USDT
-- Avg loss:   {stats['avg_loss']} USDT
-- Best trade: {stats['best_trade']} USDT | Worst: {stats['worst_trade']} USDT
+- Win rate:        {stats['win_rate']}%
+- Total PnL:       {stats['total_pnl']} USDT
+- Avg win:         {stats['avg_win']} USDT
+- Avg loss:        {stats['avg_loss']} USDT
+- Best trade:      {stats['best_trade']} USDT | Worst: {stats['worst_trade']} USDT
 - Long/Short ratio: {stats['long_trades']}/{stats['short_trades']}
+- Max drawdown:    {drawdown.get('max_drawdown_usdt', 'N/A')} USDT
+- Current streak:  {streak['length']} consecutive {streak['type']}s
 
 ## Per-Strategy Breakdown
 {json.dumps(strat_stats, indent=2)}
@@ -162,6 +186,7 @@ Analyze the performance data and produce recommendations for exactly two things:
    - Pin a symbol to a specific strategy only if it consistently outperforms others (≥5 trades evidence)
    - Set back to "auto" if a pinned strategy is underperforming
    - No change if data is insufficient or mixed
+   - Valid values: auto | sniper | lsob | scalp | trend | fvg
 
 Be conservative. If in doubt, recommend no change. Stability is valuable.
 Explain your reasoning clearly with reference to the numbers."""
@@ -237,7 +262,7 @@ def _run_single_analysis(client: anthropic.Anthropic) -> None:
             log.info(f"Analyst: score stays at {current_score} (clamped or unchanged).")
 
     # ---- Apply symbol strategy adjustments ----
-    valid_strategies = {"auto", "sniper", "lsob", "scalp", "trend"}
+    valid_strategies = {"auto", "sniper", "lsob", "scalp", "trend", "fvg"}
     for adj in result.symbol_adjustments:
         if adj.symbol not in config.SYMBOLS:
             log.warning(f"Analyst: unknown symbol '{adj.symbol}' — skipping.")

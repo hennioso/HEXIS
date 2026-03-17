@@ -388,7 +388,7 @@ def api_set_strategy():
 
     ok = strategy_state.set_strategy(symbol, strat)
     if not ok:
-        return jsonify({"error": f"invalid strategy '{strat}'. Use: trend | scalp | sniper | lsob | auto"}), 400
+        return jsonify({"error": f"invalid strategy '{strat}'. Use: trend | scalp | sniper | lsob | fvg | auto"}), 400
 
     return jsonify({"ok": True, "symbol": symbol, "strategy": strat})
 

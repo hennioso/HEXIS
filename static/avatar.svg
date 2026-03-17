@@ -1,0 +1,177 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="45%" r="55%">
+      <stop offset="0%"   stop-color="#0d2a1a"/>
+      <stop offset="55%"  stop-color="#07120d"/>
+      <stop offset="100%" stop-color="#030808"/>
+    </radialGradient>
+    <filter id="eyeGlow" x="-80%" y="-80%" width="360%" height="360%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="tongueGlow" x="-80%" y="-80%" width="360%" height="360%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="32" fill="url(#bgGlow)"/>
+
+  <!-- ═══════════════════════════════════════════
+       PIXEL ART COBRA FACE  –  16×16 grid @ 32px
+       ═══════════════════════════════════════════ -->
+
+  <!-- ROW 0  y=0  – hood top -->
+  <rect x="128" y="0"   width="256" height="32" fill="#091409"/>
+
+  <!-- ROW 1  y=32 – hood wide -->
+  <rect x="64"  y="32"  width="64"  height="32" fill="#091409"/>
+  <rect x="128" y="32"  width="256" height="32" fill="#1a3a1a"/>
+  <rect x="384" y="32"  width="64"  height="32" fill="#091409"/>
+
+  <!-- ROW 2  y=64 – hood body -->
+  <rect x="32"  y="64"  width="32"  height="32" fill="#091409"/>
+  <rect x="64"  y="64"  width="64"  height="32" fill="#1a3a1a"/>
+  <rect x="128" y="64"  width="256" height="32" fill="#2d5a2d"/>
+  <rect x="384" y="64"  width="64"  height="32" fill="#1a3a1a"/>
+  <rect x="448" y="64"  width="32"  height="32" fill="#091409"/>
+
+  <!-- ROW 3  y=96 – hood with scale diamonds -->
+  <rect x="0"   y="96"  width="32"  height="32" fill="#091409"/>
+  <rect x="32"  y="96"  width="32"  height="32" fill="#1a3a1a"/>
+  <rect x="64"  y="96"  width="96"  height="32" fill="#2d5a2d"/>
+  <rect x="160" y="96"  width="64"  height="32" fill="#4a8a4a"/>
+  <rect x="224" y="96"  width="64"  height="32" fill="#2d5a2d"/>
+  <rect x="288" y="96"  width="64"  height="32" fill="#4a8a4a"/>
+  <rect x="352" y="96"  width="96"  height="32" fill="#2d5a2d"/>
+  <rect x="448" y="96"  width="32"  height="32" fill="#1a3a1a"/>
+  <rect x="480" y="96"  width="32"  height="32" fill="#091409"/>
+
+  <!-- ROW 4  y=128 – EYES top -->
+  <rect x="0"   y="128" width="32"  height="32" fill="#091409"/>
+  <rect x="32"  y="128" width="32"  height="32" fill="#1a3a1a"/>
+  <rect x="64"  y="128" width="64"  height="32" fill="#2d5a2d"/>
+  <rect x="128" y="128" width="32"  height="32" fill="#0d2a0d"/>
+  <rect x="160" y="128" width="64"  height="32" fill="#3fb950"/>
+  <rect x="224" y="128" width="64"  height="32" fill="#0d2a0d"/>
+  <rect x="288" y="128" width="64"  height="32" fill="#3fb950"/>
+  <rect x="352" y="128" width="32"  height="32" fill="#0d2a0d"/>
+  <rect x="384" y="128" width="64"  height="32" fill="#2d5a2d"/>
+  <rect x="448" y="128" width="32"  height="32" fill="#1a3a1a"/>
+  <rect x="480" y="128" width="32"  height="32" fill="#091409"/>
+
+  <!-- ROW 5  y=160 – EYES with pupils -->
+  <rect x="0"   y="160" width="32"  height="32" fill="#091409"/>
+  <rect x="32"  y="160" width="32"  height="32" fill="#1a3a1a"/>
+  <rect x="64"  y="160" width="64"  height="32" fill="#2d5a2d"/>
+  <rect x="128" y="160" width="32"  height="32" fill="#0d2a0d"/>
+  <rect x="160" y="160" width="32"  height="32" fill="#3fb950"/>
+  <rect x="192" y="160" width="32"  height="32" fill="#000000"/>
+  <rect x="224" y="160" width="64"  height="32" fill="#0d2a0d"/>
+  <rect x="288" y="160" width="32"  height="32" fill="#000000"/>
+  <rect x="320" y="160" width="32"  height="32" fill="#3fb950"/>
+  <rect x="352" y="160" width="32"  height="32" fill="#0d2a0d"/>
+  <rect x="384" y="160" width="64"  height="32" fill="#2d5a2d"/>
+  <rect x="448" y="160" width="32"  height="32" fill="#1a3a1a"/>
+  <rect x="480" y="160" width="32"  height="32" fill="#091409"/>
+
+  <!-- ROW 6  y=192 – EYES bottom -->
+  <rect x="0"   y="192" width="32"  height="32" fill="#091409"/>
+  <rect x="32"  y="192" width="32"  height="32" fill="#1a3a1a"/>
+  <rect x="64"  y="192" width="64"  height="32" fill="#2d5a2d"/>
+  <rect x="128" y="192" width="32"  height="32" fill="#0d2a0d"/>
+  <rect x="160" y="192" width="64"  height="32" fill="#3fb950"/>
+  <rect x="224" y="192" width="64"  height="32" fill="#2d5a2d"/>
+  <rect x="288" y="192" width="64"  height="32" fill="#3fb950"/>
+  <rect x="352" y="192" width="32"  height="32" fill="#0d2a0d"/>
+  <rect x="384" y="192" width="64"  height="32" fill="#2d5a2d"/>
+  <rect x="448" y="192" width="32"  height="32" fill="#1a3a1a"/>
+  <rect x="480" y="192" width="32"  height="32" fill="#091409"/>
+
+  <!-- ROW 7  y=224 – below eyes, full width face -->
+  <rect x="0"   y="224" width="32"  height="32" fill="#091409"/>
+  <rect x="32"  y="224" width="32"  height="32" fill="#1a3a1a"/>
+  <rect x="64"  y="224" width="384" height="32" fill="#2d5a2d"/>
+  <rect x="448" y="224" width="32"  height="32" fill="#1a3a1a"/>
+  <rect x="480" y="224" width="32"  height="32" fill="#091409"/>
+
+  <!-- ROW 8  y=256 – face narrowing, scale highlights -->
+  <rect x="32"  y="256" width="32"  height="32" fill="#091409"/>
+  <rect x="64"  y="256" width="32"  height="32" fill="#1a3a1a"/>
+  <rect x="96"  y="256" width="96"  height="32" fill="#2d5a2d"/>
+  <rect x="192" y="256" width="32"  height="32" fill="#4a8a4a"/>
+  <rect x="224" y="256" width="64"  height="32" fill="#2d5a2d"/>
+  <rect x="288" y="256" width="32"  height="32" fill="#4a8a4a"/>
+  <rect x="320" y="256" width="96"  height="32" fill="#2d5a2d"/>
+  <rect x="416" y="256" width="32"  height="32" fill="#1a3a1a"/>
+  <rect x="448" y="256" width="32"  height="32" fill="#091409"/>
+
+  <!-- ROW 9  y=288 – face, scale pattern -->
+  <rect x="32"  y="288" width="32"  height="32" fill="#091409"/>
+  <rect x="64"  y="288" width="32"  height="32" fill="#1a3a1a"/>
+  <rect x="96"  y="288" width="64"  height="32" fill="#2d5a2d"/>
+  <rect x="160" y="288" width="32"  height="32" fill="#4a8a4a"/>
+  <rect x="192" y="288" width="128" height="32" fill="#2d5a2d"/>
+  <rect x="320" y="288" width="32"  height="32" fill="#4a8a4a"/>
+  <rect x="352" y="288" width="64"  height="32" fill="#2d5a2d"/>
+  <rect x="416" y="288" width="32"  height="32" fill="#1a3a1a"/>
+  <rect x="448" y="288" width="32"  height="32" fill="#091409"/>
+
+  <!-- ROW 10 y=320 – narrowing further -->
+  <rect x="64"  y="320" width="32"  height="32" fill="#091409"/>
+  <rect x="96"  y="320" width="32"  height="32" fill="#1a3a1a"/>
+  <rect x="128" y="320" width="96"  height="32" fill="#2d5a2d"/>
+  <rect x="224" y="320" width="64"  height="32" fill="#4a8a4a"/>
+  <rect x="288" y="320" width="96"  height="32" fill="#2d5a2d"/>
+  <rect x="384" y="320" width="32"  height="32" fill="#1a3a1a"/>
+  <rect x="416" y="320" width="32"  height="32" fill="#091409"/>
+
+  <!-- ROW 11 y=352 -->
+  <rect x="64"  y="352" width="32"  height="32" fill="#091409"/>
+  <rect x="96"  y="352" width="32"  height="32" fill="#1a3a1a"/>
+  <rect x="128" y="352" width="256" height="32" fill="#2d5a2d"/>
+  <rect x="384" y="352" width="32"  height="32" fill="#1a3a1a"/>
+  <rect x="416" y="352" width="32"  height="32" fill="#091409"/>
+
+  <!-- ROW 12 y=384 – chin -->
+  <rect x="96"  y="384" width="32"  height="32" fill="#091409"/>
+  <rect x="128" y="384" width="64"  height="32" fill="#1a3a1a"/>
+  <rect x="192" y="384" width="128" height="32" fill="#2d5a2d"/>
+  <rect x="320" y="384" width="64"  height="32" fill="#1a3a1a"/>
+  <rect x="384" y="384" width="32"  height="32" fill="#091409"/>
+
+  <!-- ROW 13 y=416 – neck -->
+  <rect x="128" y="416" width="32"  height="32" fill="#091409"/>
+  <rect x="160" y="416" width="192" height="32" fill="#1a3a1a"/>
+  <rect x="352" y="416" width="32"  height="32" fill="#091409"/>
+
+  <!-- ROW 14 y=448 – tongue base -->
+  <rect x="160" y="448" width="64"  height="32" fill="#091409"/>
+  <rect x="224" y="448" width="64"  height="32" fill="#f04040"/>
+  <rect x="288" y="448" width="64"  height="32" fill="#091409"/>
+
+  <!-- ROW 15 y=480 – forked tongue -->
+  <rect x="160" y="480" width="64"  height="32" fill="#f04040"/>
+  <rect x="288" y="480" width="64"  height="32" fill="#f04040"/>
+
+  <!-- ═══════════════════════════════════
+       GLOW OVERLAYS (eyes + tongue)
+       ═══════════════════════════════════ -->
+
+  <!-- Eye glow layer (drawn on top, filtered) -->
+  <g filter="url(#eyeGlow)" opacity="0.7">
+    <!-- Left eye -->
+    <rect x="160" y="128" width="64"  height="96" fill="#3fb950"/>
+    <!-- Right eye -->
+    <rect x="288" y="128" width="64"  height="96" fill="#3fb950"/>
+  </g>
+
+  <!-- Tongue glow -->
+  <g filter="url(#tongueGlow)" opacity="0.6">
+    <rect x="224" y="448" width="64"  height="32" fill="#f04040"/>
+    <rect x="160" y="480" width="64"  height="32" fill="#f04040"/>
+    <rect x="288" y="480" width="64"  height="32" fill="#f04040"/>
+  </g>
+
+</svg>

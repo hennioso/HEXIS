@@ -4,7 +4,7 @@
 
 # HEXIS – Autonomous Crypto Agent
 
-An autonomous futures trading agent for the **Bitunix** exchange. Trades multiple symbols in parallel using four strategies — trend-following, scalping, Fibonacci sniper, and liquidity sweep orderblock — with a live web dashboard, Telegram notifications, circuit breakers, and an **AI Trade Analyst** that automatically tunes parameters based on performance.
+An autonomous futures trading agent for the **Bitunix** exchange. Trades multiple symbols in parallel using five strategies — trend-following, scalping, Fibonacci sniper, liquidity sweep orderblock, and fair value gap — with a live web dashboard, Telegram notifications, circuit breakers, and an **AI Trade Analyst** that automatically tunes parameters based on performance.
 
 > **Status: Active Test Phase** — The agent is currently running live with real capital in a controlled test environment. Position sizes are intentionally limited while strategies are being validated and refined.
 
@@ -18,18 +18,21 @@ An autonomous futures trading agent for the **Bitunix** exchange. Trades multipl
 
 ### Trading Engine
 - **Multi-symbol trading** — BTC, ETH, SOL, XRP, HYPE, ADA, BNB running in parallel
-- **Four strategies** configurable per symbol (hot-swappable without restart):
+- **Five strategies** configurable per symbol (hot-swappable without restart):
   - `trend` — RSI + EMA Crossover with 5m/15m multi-timeframe filter
   - `scalp` — Bollinger Bands + RSI(7) + Volume confirmation
   - `sniper` — Fibonacci retracement entries (Fib 0.882) with partial TP cascade and Break Even stop
   - `lsob` — Liquidity Sweep + Orderblock re-entry
-- **Agent Mode** — global scanner evaluates all 7 symbols × 4 strategies (28 combos) per tick, opens only the single best-scoring setup above a configurable threshold
+  - `fvg` — Fair Value Gap retest (price imbalance entries in trend direction)
+- **Agent Mode** — global scanner evaluates all 7 symbols × 5 strategies (35 combos) per tick, opens only the single best-scoring setup above a configurable threshold
 - **Fixed fractional risk sizing** — position size based on % account risk / SL distance
 - **Learning phase** — margin capped at 25 USDT for the first 10 trades
 
 ### AI Trade Analyst
 - **Claude-powered analysis** — reads last 100 closed trades every 4 hours and auto-adjusts the score threshold and per-symbol strategies based on actual performance
+- **Context-aware prompt** — includes drawdown metrics, current win/loss streak, per-strategy and per-symbol breakdown
 - **Safety guards** — never adjusts while positions are open, requires min. 5 closed trades
+- **All 5 strategies** are known to the analyst — can pin or unpin any symbol to/from FVG, SNIPER, LSOB, SCALP, TREND, or AUTO
 
 ### Circuit Breakers
 - **Daily Loss Guard** — pauses ALL trading when today's realized PnL drops below a configurable threshold (default: −30 USDT). Resets automatically at UTC midnight
@@ -44,11 +47,11 @@ An autonomous futures trading agent for the **Bitunix** exchange. Trades multipl
 - Fire-and-forget (non-blocking) — never delays trade execution
 
 ### Web Dashboard
-- **Secure login page** — custom HTML login with Flask session auth (HTTP Basic Auth replaced)
+- **Secure login page** — custom HTML login with Flask session auth
 - **Balance banner** — Available, In Margin, Unrealized PnL, Total (Est.)
 - **Tab navigation** — Overview, Analytics, Backtest
 - **Overview tab**:
-  - Live symbol strip with price, 24h change, and per-symbol strategy buttons
+  - Live symbol strip with price, 24h change, and per-symbol strategy buttons (TREND / SCALP / SNIPER / LSOB / FVG / AUTO)
   - Performance stats cards — Total PnL, ROI, Win Rate, Trades, Open Positions, Avg Win/Loss, Best/Worst Trade
   - Time filter — 1D / 5D / 7D / 14D / 30D / All
   - PnL chart + strategy distribution chart
@@ -205,6 +208,7 @@ The Agent Scanner scores all (symbol × strategy) combinations and only opens a 
 | SNIPER (Fibonacci 0.882) | 10 |
 | LSOB (Liquidity Sweep OB) | 9 |
 | SCALP (BB + RSI + Volume) | 9 |
+| FVG (Fair Value Gap retest) | 9 |
 | TREND (EMA 9/21/50) | 7 |
 
 > Raising the threshold to 8+ effectively excludes TREND entries. The AI Analyst automatically tunes this threshold based on win rate.
@@ -247,6 +251,18 @@ Smart money entry logic:
 - **SL**: Structurally placed beyond the sweep wick
 - **TP**: Prior liquidity / swing level on the opposite side
 
+### FVG (Fair Value Gap)
+
+Price imbalance entry in the direction of the original impulse:
+
+- **Bullish FVG**: Three-candle pattern where candle 3's low > candle 1's high (gap above)
+- **Bearish FVG**: Three-candle pattern where candle 3's high < candle 1's low (gap below)
+- **Entry**: Price retraces into the unfilled gap zone
+- **Invalidation**: Gap is discarded if any subsequent candle closes beyond the gap boundary
+- **SL**: 0.2% beyond the gap boundary (structural)
+- **TP**: 2× the gap size from entry (2:1 R:R)
+- **Trend filter**: EMA50 on 15m — LONG only above EMA50, SHORT only below
+
 ---
 
 ## AI Trade Analyst
@@ -254,12 +270,12 @@ Smart money entry logic:
 **What it does:**
 - Runs every **4 hours** (first run 30 minutes after startup)
 - Reads the last 100 closed trades from the database
-- Calls Claude (claude-opus-4-6 with extended thinking) to analyze win rates, PnL per strategy/symbol, and entry quality
+- Calls Claude (claude-opus-4-6 with extended thinking) to analyze win rates, PnL per strategy/symbol, drawdown, and current streak
 - Applies structured recommendations automatically
 
 **What it adjusts:**
 - `MIN_OPEN_SCORE` — the Agent Scanner threshold (bounded 5–9)
-- Per-symbol strategy — pin to a specific strategy or revert to `auto`
+- Per-symbol strategy — pin to a specific strategy or revert to `auto` (all 5 strategies supported)
 
 **Safety:**
 - Never adjusts while any position is open
@@ -280,6 +296,7 @@ HEXIS/
 ├── strategy_scalp.py     # Scalp strategy (Bollinger Bands + Volume)
 ├── strategy_sniper.py    # Sniper strategy (Fibonacci retracement)
 ├── strategy_lsob.py      # LSOB strategy (Liquidity Sweep Orderblock)
+├── strategy_fvg.py       # FVG strategy (Fair Value Gap retest)
 ├── strategy_scanner.py   # Global opportunity scanner (Agent Mode)
 ├── strategy_selector.py  # Per-strategy scoring functions
 ├── strategy_state.py     # Per-symbol strategy state (hot-swap)

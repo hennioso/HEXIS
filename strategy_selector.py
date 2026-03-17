@@ -21,6 +21,7 @@ from indicators import (
     ema,
 )
 from strategy_lsob import check_lsob_signal, OB_LOOKBACK, OB_SCAN_DEPTH
+from strategy_fvg import check_fvg_signal
 
 log = logging.getLogger(__name__)
 
@@ -208,6 +209,52 @@ def _score_scalp(df5m) -> tuple[int, list[str]]:
     return score, reasons
 
 
+def _score_fvg(klines, klines_15m=None) -> tuple[int, list[str]]:
+    """
+    High score when price is currently inside an unfilled Fair Value Gap —
+    a structural imbalance left by a strong impulse move.
+    Max score: 9 (4 base + 3 gap size + 2 freshness).
+    """
+    score = 0
+    reasons: list[str] = []
+
+    try:
+        signal = check_fvg_signal(klines, klines_15m=klines_15m)
+        if not signal:
+            return 0, ["no active FVG"]
+
+        # Base: price is inside a valid, unfilled gap
+        score += 4
+        reasons.append(
+            f"price IN {signal.direction.upper()} FVG "
+            f"[{signal.fvg_bottom:.4f}–{signal.fvg_top:.4f}]"
+        )
+
+        # Gap size quality
+        if signal.gap_pct >= 0.010:
+            score += 3
+            reasons.append(f"large gap ({signal.gap_pct*100:.1f}%)")
+        elif signal.gap_pct >= 0.005:
+            score += 2
+            reasons.append(f"medium gap ({signal.gap_pct*100:.1f}%)")
+        else:
+            score += 1
+            reasons.append(f"small gap ({signal.gap_pct*100:.1f}%)")
+
+        # Freshness — newer gaps are more reliable
+        if signal.candle_age <= 5:
+            score += 2
+            reasons.append(f"fresh gap ({signal.candle_age} candles ago)")
+        elif signal.candle_age <= 12:
+            score += 1
+            reasons.append(f"recent gap ({signal.candle_age} candles ago)")
+
+    except Exception as e:
+        return 0, [f"error: {e}"]
+
+    return score, reasons
+
+
 def _score_trend(df5m, df15m=None) -> tuple[int, list[str]]:
     """
     High score when multiple EMAs are aligned (9 > 21 > 50),
@@ -282,6 +329,7 @@ def select_strategy(
         "lsob":   _score_lsob(klines_5m),
         "scalp":  _score_scalp(df5m),
         "trend":  _score_trend(df5m, df15m),
+        "fvg":    _score_fvg(klines_5m, klines_15m),
     }
 
     best_strategy = max(scores, key=lambda s: scores[s][0])

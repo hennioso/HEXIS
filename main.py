@@ -23,6 +23,7 @@ from strategy import check_signal
 from strategy_scalp import check_scalp_signal, ScalpSignal
 from strategy_sniper import check_sniper_signal
 from strategy_lsob import check_lsob_signal
+from strategy_fvg import check_fvg_signal
 from strategy import Signal
 from risk_manager import RiskManager
 from trader import Trader
@@ -130,6 +131,27 @@ def symbol_loop(
                     trader.open_lsob_position(lsob)
                 else:
                     log.debug("No LSOB signal.")
+            elif strategy == "fvg":
+                klines_fvg = client.get_klines(
+                    symbol, config.FVG_TF, limit=config.FVG_KLINE_LIMIT
+                )
+                klines_15m_filter = client.get_klines(symbol, "15m", limit=100)
+                fvg = check_fvg_signal(
+                    klines=klines_fvg,
+                    klines_15m=klines_15m_filter,
+                )
+                if fvg:
+                    log.info(
+                        f"FVG SIGNAL: {fvg.direction.upper()} | "
+                        f"Price: {fvg.price:.4f} | "
+                        f"Gap: [{fvg.fvg_bottom:.4f}–{fvg.fvg_top:.4f}] "
+                        f"({fvg.gap_pct*100:.2f}%) | "
+                        f"Age: {fvg.candle_age} candles | "
+                        f"SL: {fvg.sl_price:.4f} | TP: {fvg.tp_price:.4f}"
+                    )
+                    trader.open_fvg_position(fvg)
+                else:
+                    log.debug("No FVG signal.")
             elif strategy == "scalp":
                 scalp = check_scalp_signal(
                     klines_5m=klines_5m,
@@ -252,7 +274,7 @@ def agent_scanner_loop(
 
             # Log the top 5 scored setups for visibility
             log.info(
-                f"Agent scan complete | {len(candidates)} symbols × 4 strategies | "
+                f"Agent scan complete | {len(candidates)} symbols × 5 strategies | "
                 f"Top score: {opps[0].score if opps else 0} "
                 f"(threshold: {strategy_scanner.MIN_OPEN_SCORE})"
             )
@@ -284,12 +306,11 @@ def agent_scanner_loop(
 
             if best.strategy == "sniper":
                 trader.rm = risk_managers["sniper"]
-                klines_sniper = client.get_klines(
-                    best.symbol, config.SNIPER_TF, limit=config.SNIPER_KLINE_LIMIT
-                )
+                # Reuse already-fetched 15m klines — same data scorer used, no extra API call.
+                # lookback=50 matches strategy_scanner so Fib levels are identical.
                 sniper = check_sniper_signal(
-                    klines_5m=klines_sniper,
-                    lookback=config.FIB_LOOKBACK,
+                    klines_5m=klines_15m,
+                    lookback=50,
                     klines_15m=klines_15m,
                 )
                 if sniper:
@@ -340,6 +361,21 @@ def agent_scanner_loop(
                 else:
                     log.info(
                         f"AGENT: {best.symbol} SCALP scored {best.score} "
+                        f"but signal no longer active — skipping."
+                    )
+
+            elif best.strategy == "fvg":
+                trader.rm = risk_managers["fvg"]
+                # Reuse already-fetched 15m klines — same data scorer used
+                fvg = check_fvg_signal(
+                    klines=klines_15m,
+                    klines_15m=klines_15m,
+                )
+                if fvg:
+                    trader.open_fvg_position(fvg)
+                else:
+                    log.info(
+                        f"AGENT: {best.symbol} FVG scored {best.score} "
                         f"but signal no longer active — skipping."
                     )
 
@@ -434,6 +470,7 @@ def main():
         "scalp":  risk_manager_scalp,
         "sniper": risk_manager_fib,
         "lsob":   risk_manager_fib,
+        "fvg":    risk_manager_fib,   # structural SL — same sizing as SNIPER/LSOB
     }
 
     # Start the global Agent Scanner (handles all AUTO symbols centrally)
