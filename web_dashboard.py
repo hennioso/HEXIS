@@ -89,18 +89,50 @@ def api_user_keys():
     if not user_id:
         return jsonify({"error": "not logged in"}), 401
     if request.method == "POST":
-        data   = request.get_json(force=True) or {}
+        data    = request.get_json(force=True) or {}
         api_key = data.get("api_key", "").strip()
         secret  = data.get("secret_key", "").strip()
         if not api_key or not secret:
             return jsonify({"error": "api_key and secret_key required"}), 400
         db.update_user_api_keys(user_id, api_key, secret)
+        # Invalidate client cache so next request picks up new keys
+        _user_clients.pop(user_id, None)
         return jsonify({"ok": True})
     user = db.get_user_by_id(user_id)
     has_keys = bool(user and user.get("api_key_enc"))
     return jsonify({"has_keys": has_keys, "username": user["username"] if user else ""})
 
-_client = BitunixClient(config.API_KEY, config.SECRET_KEY)
+_client = BitunixClient(config.API_KEY, config.SECRET_KEY)   # admin / fallback client
+
+# Per-user client cache: {user_id: BitunixClient}
+_user_clients: dict[int, BitunixClient] = {}
+
+
+def _get_client() -> BitunixClient:
+    """
+    Return the BitunixClient for the currently logged-in user.
+    Falls back to the admin client if the user has no API keys stored.
+    """
+    uid = session.get("user_id")
+    if not uid:
+        return _client
+
+    # Serve from cache
+    if uid in _user_clients:
+        return _user_clients[uid]
+
+    # Build client from DB keys
+    try:
+        users = db.get_users_with_api_keys()
+        user  = next((u for u in users if u["id"] == uid), None)
+        if user:
+            client = BitunixClient(user["api_key"], user["secret"])
+            _user_clients[uid] = client
+            return client
+    except Exception:
+        pass
+
+    return _client
 
 # Circuit breakers for the dashboard process
 circuit_breaker.init(
@@ -138,7 +170,7 @@ def _sync_open_trades():
 
     # Alle offenen Exchange-Positionen einmalig abrufen
     try:
-        all_positions = _client.get_open_positions()
+        all_positions = _get_client().get_open_positions()
         pos_by_symbol = {p.get("symbol"): p for p in all_positions if float(p.get("qty", 0)) > 0}
     except Exception:
         return
@@ -177,7 +209,7 @@ def _sync_open_trades():
 
         # Nicht mehr auf Exchange → schließen
         try:
-            ticker = _client.get_ticker(symbol)
+            ticker = _get_client().get_ticker(symbol)
             exit_price = float(ticker.get("lastPrice", ticker.get("close", 0)))
         except Exception:
             exit_price = 0.0
@@ -355,7 +387,7 @@ def api_daily_pnl():
 def api_price():
     symbol = request.args.get("symbol", config.SYMBOL)
     try:
-        ticker = _client.get_ticker(symbol)
+        ticker = _get_client().get_ticker(symbol)
         last  = float(ticker.get("lastPrice", ticker.get("close", 0)))
         open_ = float(ticker.get("open", 0))
         change_pct = round((last - open_) / open_ * 100, 2) if open_ else 0.0
@@ -376,7 +408,7 @@ def api_prices():
     results = []
     for symbol in config.SYMBOLS:
         try:
-            t = _client.get_ticker(symbol)
+            t = _get_client().get_ticker(symbol)
             last  = float(t.get("lastPrice", t.get("close", 0)))
             open_ = float(t.get("open", 0))
             change_pct = round((last - open_) / open_ * 100, 2) if open_ else 0.0
@@ -393,7 +425,8 @@ def api_prices():
 @app.route("/api/balance")
 def api_balance():
     try:
-        data = _client.get_balance("USDT")
+        client = _get_client()
+        data = client.get_balance("USDT")
 
         # Bitunix uses different field names — try all known variants
         unrealized = 0.0
@@ -408,7 +441,7 @@ def api_balance():
         # Fallback: calculate from open positions
         if unrealized == 0.0:
             try:
-                positions = _client.get_open_positions()
+                positions = client.get_open_positions()
                 for p in positions:
                     for pf in ("unrealizedPNL", "unRealizedPNL", "pnl"):
                         v = p.get(pf)
@@ -511,16 +544,18 @@ def api_close_position():
         if not symbol:
             return jsonify({"error": "symbol missing"}), 400
 
+        client = _get_client()
+
         # Get current price for PnL calculation
         exit_price = 0.0
         try:
-            ticker     = _client.get_ticker(symbol)
+            ticker     = client.get_ticker(symbol)
             exit_price = float(ticker.get("lastPrice", ticker.get("close", 0)))
         except Exception:
             pass
 
         # Get open position on the exchange
-        positions = _client.get_open_positions(symbol)
+        positions = client.get_open_positions(symbol)
         pos = next((p for p in positions if float(p.get("qty", 0)) > 0), None)
 
         order_result = None
@@ -529,7 +564,7 @@ def api_close_position():
             position_side = pos.get("side", "BUY")
             qty           = str(pos.get("qty", "0"))
             close_side    = "SELL" if position_side == "BUY" else "BUY"
-            order_result = _client.place_order(
+            order_result = client.place_order(
                 symbol=symbol,
                 side=close_side,
                 trade_side="OPEN",
