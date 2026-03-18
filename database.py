@@ -462,7 +462,7 @@ def get_analytics() -> dict:
         # ---- Per-strategy ----
         strat_data: dict[str, list] = {}
         for r in closed:
-            key = r["strategy"] or "unknown"
+            key = r["strategy"] or "trend"   # legacy trades without strategy tag → trend
             strat_data.setdefault(key, []).append(r["pnl_usdt"])
 
         by_strategy = []

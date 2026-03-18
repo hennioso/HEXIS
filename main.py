@@ -174,7 +174,7 @@ def symbol_loop(
                         ema_slow_5m=0,
                         trend_15m="scalp",
                     )
-                    trader.open_position(signal)
+                    trader.open_position(signal, strategy="scalp")
                 else:
                     log.debug("No scalp signal.")
             else:
@@ -193,7 +193,7 @@ def symbol_loop(
                         f"RSI: {signal.rsi_5m:.1f} | "
                         f"Trend: {signal.trend_15m}"
                     )
-                    trader.open_position(signal)
+                    trader.open_position(signal, strategy="trend")
                 else:
                     log.debug("No signal.")
 
@@ -355,7 +355,7 @@ def agent_scanner_loop(
                         ema_slow_5m=0,
                         trend_15m="scalp",
                     )
-                    trader.open_position(signal)
+                    trader.open_position(signal, strategy="scalp")
                 else:
                     log.info(
                         f"AGENT: {best.symbol} SCALP scored {best.score} "
@@ -387,7 +387,7 @@ def agent_scanner_loop(
                     rsi_period=config.RSI_PERIOD,
                 )
                 if signal:
-                    trader.open_position(signal)
+                    trader.open_position(signal, strategy="trend")
                 else:
                     log.info(
                         f"AGENT: {best.symbol} TREND scored {best.score} "
