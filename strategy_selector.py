@@ -79,7 +79,7 @@ def _score_sniper(df5m, df15m=None) -> tuple[int, list[str]]:
             score += 1
             reasons.append(f"approaching Fib 0.882 ({best_dist*100:.2f}%)")
 
-        # EMA50 trend alignment bonus
+        # EMA50 trend filter — must align with direction (hard block, matches entry check)
         if df15m is not None and len(df15m) >= 55:
             try:
                 ema50 = float(ema(df15m["close"], 50).iloc[-1])
@@ -89,8 +89,8 @@ def _score_sniper(df5m, df15m=None) -> tuple[int, list[str]]:
                     score += 2
                     reasons.append("EMA50 aligned with direction")
                 else:
-                    score -= 1
-                    reasons.append("EMA50 counter-trend (penalty)")
+                    # Entry check enforces this strictly — don't surface counter-trend signals
+                    return 0, ["EMA50 counter-trend (blocked)"]
             except Exception:
                 pass
 
