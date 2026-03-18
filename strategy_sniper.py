@@ -109,6 +109,12 @@ def check_sniper_signal(
     # ------------------------------------------------------------------
     long_entry = swing_high - 0.882 * rng
     if allow_long and abs(price - long_entry) / long_entry <= FIB_TOLERANCE:
+        tp1 = round(swing_high - TP1_FIB * rng, 8)
+        tp2 = round(swing_high - 0.650 * rng, 8)
+        tp3 = round(swing_high - 0.500 * rng, 8)
+        # All TPs must be above entry — reject if price slipped below fib level
+        if not (price < tp1 < tp2 < tp3):
+            return None
         return SniperSignal(
             direction="long",
             price=price,
@@ -116,9 +122,9 @@ def check_sniper_signal(
             swing_high=swing_high,
             swing_low=swing_low,
             sl_price=round(swing_low * (1 - SL_BUFFER), 8),
-            tp1_price=round(swing_high - TP1_FIB * rng, 8),
-            tp2_price=round(swing_high - 0.650 * rng, 8),
-            tp3_price=round(swing_high - 0.500 * rng, 8),
+            tp1_price=tp1,
+            tp2_price=tp2,
+            tp3_price=tp3,
         )
 
     # ------------------------------------------------------------------
@@ -126,6 +132,12 @@ def check_sniper_signal(
     # ------------------------------------------------------------------
     short_entry = swing_low + 0.882 * rng
     if allow_short and abs(price - short_entry) / short_entry <= FIB_TOLERANCE:
+        tp1 = round(swing_low + TP1_FIB * rng, 8)
+        tp2 = round(swing_low + 0.650 * rng, 8)
+        tp3 = round(swing_low + 0.500 * rng, 8)
+        # All TPs must be below entry — reject if price slipped above fib level
+        if not (price > tp1 > tp2 > tp3):
+            return None
         return SniperSignal(
             direction="short",
             price=price,
@@ -133,9 +145,9 @@ def check_sniper_signal(
             swing_high=swing_high,
             swing_low=swing_low,
             sl_price=round(swing_high * (1 + SL_BUFFER), 8),
-            tp1_price=round(swing_low + TP1_FIB * rng, 8),
-            tp2_price=round(swing_low + 0.650 * rng, 8),
-            tp3_price=round(swing_low + 0.500 * rng, 8),
+            tp1_price=tp1,
+            tp2_price=tp2,
+            tp3_price=tp3,
         )
 
     return None
