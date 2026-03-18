@@ -45,7 +45,8 @@ except ImportError:
     _OPENAI_AVAILABLE = False
 
 try:
-    import google.generativeai as genai
+    from google import genai as _genai_module
+    from google.genai import types as _genai_types
     _GEMINI_AVAILABLE = True
 except ImportError:
     _GEMINI_AVAILABLE = False
@@ -269,11 +270,12 @@ def _analyse_with_openai(client, prompt: str) -> AnalysisResult:
     return result
 
 
-def _analyse_with_gemini(model, prompt: str) -> AnalysisResult:
+def _analyse_with_gemini(client, prompt: str) -> AnalysisResult:
     full_prompt = f"{_SYSTEM_GEMINI}\n\n{prompt}"
-    response = model.generate_content(
-        full_prompt,
-        generation_config=genai.GenerationConfig(
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=full_prompt,
+        config=_genai_types.GenerateContentConfig(
             response_mime_type="application/json",
             response_schema=AnalysisResult,
         ),
@@ -396,7 +398,8 @@ def _run_analysis_cycle(
     if openai_client:
         tasks["GPT-4o"] = lambda: _analyse_with_openai(openai_client, prompt)
     if gemini_model:
-        tasks["Gemini"] = lambda: _analyse_with_gemini(gemini_model, prompt)
+        _gm = gemini_model  # capture for lambda
+        tasks["Gemini"] = lambda: _analyse_with_gemini(_gm, prompt)
 
     results: list[tuple[str, AnalysisResult]] = []
     with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
@@ -542,15 +545,14 @@ def run_analysis_loop(stop_event: threading.Event) -> None:
     gemini_key = os.getenv("GOOGLE_API_KEY", "")
     if _GEMINI_AVAILABLE and gemini_key:
         try:
-            genai.configure(api_key=gemini_key)
-            gemini_model = genai.GenerativeModel("gemini-2.0-flash")
+            gemini_model = _genai_module.Client(api_key=gemini_key)
             log.info("Gemini analyst: enabled.")
         except Exception as e:
             log.warning(f"Gemini init failed: {e}")
     elif not gemini_key:
         log.info("Gemini analyst: disabled (GOOGLE_API_KEY not set).")
     else:
-        log.info("Gemini analyst: disabled (google-generativeai package not installed).")
+        log.info("Gemini analyst: disabled (google-genai package not installed).")
 
     while not stop_event.is_set():
         try:
