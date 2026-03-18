@@ -177,6 +177,23 @@ class Trader:
         balance = self.client.get_balance("USDT")
         return float(balance.get("available", 0))
 
+    def get_total_equity(self) -> float:
+        """Total account equity = available + used margin + unrealized PnL."""
+        try:
+            data = self.client.get_balance("USDT")
+            available  = float(data.get("available", 0))
+            margin     = float(data.get("margin", 0))
+            unrealized = 0.0
+            for field in ("crossUnrealizedPNL", "unrealizedPNL", "crossUnPNL", "unRealizedPNL"):
+                val = data.get(field)
+                if val is not None:
+                    unrealized = float(val)
+                    if unrealized != 0:
+                        break
+            return max(available + margin + unrealized, available)
+        except Exception:
+            return self.get_available_balance()
+
     def open_position(self, signal: Signal, sl_price_override: float = None, strategy: str = "trend") -> Optional[dict]:
         """
         Opens a new position based on the signal.
@@ -199,16 +216,16 @@ class Trader:
             logger.warning(f"DB already has an open trade for {self.symbol} – skipping duplicate.")
             return None
 
-        balance = self.get_available_balance()
-        if balance < 10:
-            logger.error(f"Insufficient capital: {balance:.2f} USDT")
+        equity = self.get_total_equity()
+        if equity < 10:
+            logger.error(f"Insufficient capital: {equity:.2f} USDT")
             return None
 
         trade_count = db.get_trade_count()
         trade_params = self.rm.calculate(
             direction=signal.direction,
             entry_price=signal.price,
-            available_balance=balance,
+            available_balance=equity,
             trade_count=trade_count,
             sl_price_override=sl_price_override,
         )
@@ -304,9 +321,9 @@ class Trader:
                 )
                 return None
 
-        balance = self.get_available_balance()
-        if balance < 10:
-            logger.error(f"Insufficient capital: {balance:.2f} USDT")
+        equity = self.get_total_equity()
+        if equity < 10:
+            logger.error(f"Insufficient capital: {equity:.2f} USDT")
             return None
 
         trade_count = db.get_trade_count()
@@ -322,22 +339,11 @@ class Trader:
         else:
             price_prec = 5
 
-        # Position sizing: risk based on structural SL distance
-        risk_usdt = balance * self.rm.risk_per_trade
-        sl_dist = abs(entry_price - sniper.sl_price)
-        if sl_dist == 0:
-            return None
-        qty = round(risk_usdt / sl_dist, self.rm.qty_precision)
+        # Equity-based sizing: fixed % of total equity as margin
+        margin_usdt = equity * self.rm.position_margin_pct
+        qty = round((margin_usdt * self.rm.leverage) / entry_price, self.rm.qty_precision)
 
-        # Hard margin cap: never use more than max_margin_pct of balance per trade
-        max_qty_margin = round(
-            (balance * self.rm.max_margin_pct * self.rm.leverage) / entry_price,
-            self.rm.qty_precision,
-        )
-        if qty > max_qty_margin:
-            qty = max_qty_margin
-
-        # Margin cap for learning phase
+        # Learning phase cap
         if (
             self.rm.max_margin_usdt is not None
             and self.rm.max_margin_trades > 0
@@ -355,7 +361,7 @@ class Trader:
             return None
 
         # Safety: notional cap
-        max_notional = balance * self.rm.leverage
+        max_notional = equity * self.rm.leverage
         if qty * entry_price > max_notional:
             qty = round(max_notional / entry_price, self.rm.qty_precision)
             if qty < self.rm.min_qty:
@@ -455,9 +461,9 @@ class Trader:
                     logger.info(f"LSOB: same sweep low as last trade — skipping re-entry")
                     return None
 
-        balance = self.get_available_balance()
-        if balance < 10:
-            logger.error(f"Insufficient capital: {balance:.2f} USDT")
+        equity = self.get_total_equity()
+        if equity < 10:
+            logger.error(f"Insufficient capital: {equity:.2f} USDT")
             return None
 
         trade_count = db.get_trade_count()
@@ -473,20 +479,9 @@ class Trader:
         else:
             price_prec = 5
 
-        # Size by structural SL distance
-        risk_usdt = balance * self.rm.risk_per_trade
-        sl_dist   = abs(entry_price - lsob.sl_price)
-        if sl_dist == 0:
-            return None
-        qty = round(risk_usdt / sl_dist, self.rm.qty_precision)
-
-        # Hard margin cap
-        max_qty_margin = round(
-            (balance * self.rm.max_margin_pct * self.rm.leverage) / entry_price,
-            self.rm.qty_precision,
-        )
-        if qty > max_qty_margin:
-            qty = max_qty_margin
+        # Equity-based sizing: fixed % of total equity as margin
+        margin_usdt = equity * self.rm.position_margin_pct
+        qty = round((margin_usdt * self.rm.leverage) / entry_price, self.rm.qty_precision)
 
         # Learning phase cap
         if (
@@ -505,7 +500,7 @@ class Trader:
             logger.warning("LSOB position size too small – skipping.")
             return None
 
-        max_notional = balance * self.rm.leverage
+        max_notional = equity * self.rm.leverage
         if qty * entry_price > max_notional:
             qty = round(max_notional / entry_price, self.rm.qty_precision)
             if qty < self.rm.min_qty:
@@ -591,9 +586,9 @@ class Trader:
             logger.warning(f"DB already has an open trade for {self.symbol} – skipping FVG.")
             return None
 
-        balance = self.get_available_balance()
-        if balance < 10:
-            logger.error(f"Insufficient capital: {balance:.2f} USDT")
+        equity = self.get_total_equity()
+        if equity < 10:
+            logger.error(f"Insufficient capital: {equity:.2f} USDT")
             return None
 
         trade_count  = db.get_trade_count()
@@ -609,20 +604,9 @@ class Trader:
         else:
             price_prec = 5
 
-        # Size by structural SL distance
-        risk_usdt = balance * self.rm.risk_per_trade
-        sl_dist   = abs(entry_price - fvg.sl_price)
-        if sl_dist == 0:
-            return None
-        qty = round(risk_usdt / sl_dist, self.rm.qty_precision)
-
-        # Hard margin cap
-        max_qty_margin = round(
-            (balance * self.rm.max_margin_pct * self.rm.leverage) / entry_price,
-            self.rm.qty_precision,
-        )
-        if qty > max_qty_margin:
-            qty = max_qty_margin
+        # Equity-based sizing: fixed % of total equity as margin
+        margin_usdt = equity * self.rm.position_margin_pct
+        qty = round((margin_usdt * self.rm.leverage) / entry_price, self.rm.qty_precision)
 
         # Learning phase cap
         if (
@@ -641,7 +625,7 @@ class Trader:
             logger.warning("FVG position size too small – skipping.")
             return None
 
-        max_notional = balance * self.rm.leverage
+        max_notional = equity * self.rm.leverage
         if qty * entry_price > max_notional:
             qty = round(max_notional / entry_price, self.rm.qty_precision)
             if qty < self.rm.min_qty:

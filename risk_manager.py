@@ -18,6 +18,7 @@ class TradeParams:
 class RiskManager:
     def __init__(
         self,
+        position_margin_pct: float = 0.075, # Margin per trade as % of total equity (7.5%)
         risk_per_trade: float = 0.02,
         stop_loss_pct: float = 0.015,
         take_profit_pct: float = 0.030,
@@ -25,10 +26,11 @@ class RiskManager:
         min_qty: float = 0.001,
         qty_precision: int = 3,
         price_precision: int = 1,
-        max_margin_usdt: float = None,   # Margin cap in USDT (None = no limit)
+        max_margin_usdt: float = None,   # Margin cap in USDT for learning phase
         max_margin_trades: int = 0,      # Number of trades the cap applies to
         max_margin_pct: float = 0.05,    # Hard cap: margin never exceeds this % of balance
     ):
+        self.position_margin_pct = position_margin_pct
         self.risk_per_trade = risk_per_trade
         self.stop_loss_pct = stop_loss_pct
         self.take_profit_pct = take_profit_pct
@@ -44,26 +46,20 @@ class RiskManager:
         self,
         direction: str,
         entry_price: float,
-        available_balance: float,
+        available_balance: float,   # total equity passed here
         trade_count: int = 0,
         sl_price_override: float = None,
     ) -> TradeParams | None:
         """
         Calculates qty, TP and SL for a trade.
+        Uses equity-based sizing: margin = total_equity × position_margin_pct.
         Returns None if the position size is too small.
-
-        direction: 'long' | 'short'
-        entry_price: entry price in USDT
-        available_balance: available USDT in account
         """
-        # Maximum risk in USDT
-        risk_usdt = available_balance * self.risk_per_trade
+        # Equity-based sizing: fixed % of total equity as margin
+        margin_usdt = available_balance * self.position_margin_pct
+        qty = round((margin_usdt * self.leverage) / entry_price, self.qty_precision)
 
-        # Qty = risk_usdt / (entry_price * stop_loss_pct)
-        qty = risk_usdt / (entry_price * self.stop_loss_pct)
-        qty = round(qty, self.qty_precision)
-
-        # Margin cap for the first N trades (learning phase)
+        # Learning phase cap: first N trades limited to max_margin_usdt
         if (
             self.max_margin_usdt is not None
             and self.max_margin_trades > 0
@@ -81,15 +77,6 @@ class RiskManager:
 
         # Notional value (without leverage)
         notional = qty * entry_price
-
-        # Hard cap: margin (notional / leverage) must not exceed max_margin_pct of balance
-        max_margin_from_pct = available_balance * self.max_margin_pct
-        max_notional_from_pct = max_margin_from_pct * self.leverage
-        if notional > max_notional_from_pct:
-            qty = round(max_notional_from_pct / entry_price, self.qty_precision)
-            if qty < self.min_qty:
-                return None
-            notional = qty * entry_price
 
         # Safety check: notional must not exceed available_balance * leverage
         max_notional = available_balance * self.leverage

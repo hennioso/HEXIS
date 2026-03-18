@@ -33,6 +33,10 @@ RISK_PER_TRADE = float(os.getenv("RISK_PER_TRADE", "0.05"))    # 5% capital risk
 STOP_LOSS_PCT = float(os.getenv("STOP_LOSS_PCT", "0.025"))     # 2.5% stop loss
 TAKE_PROFIT_PCT = float(os.getenv("TAKE_PROFIT_PCT", "0.050")) # 5.0% take profit (2:1 R:R)
 
+# Position sizing: margin per trade as % of total account equity (available + used + unrealized PnL)
+# 7.5% means: $1171 equity → $87.88 margin → $878.80 notional at 10× leverage
+POSITION_MARGIN_PCT = float(os.getenv("POSITION_MARGIN_PCT", "0.075"))
+
 # Hard cap: margin per trade never exceeds this % of available balance (always active)
 MAX_MARGIN_PCT = float(os.getenv("MAX_MARGIN_PCT", "0.05"))  # 5% → max $55 margin on $1100
 

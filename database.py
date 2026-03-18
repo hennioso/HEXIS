@@ -1,16 +1,35 @@
 """
-SQLite database for trade history.
-Stores all trades with entry, exit, PnL, etc.
+SQLite database for trade history and user accounts.
 """
 
 import sqlite3
 import threading
+import base64
+import hashlib
+import os
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Optional
 
+from cryptography.fernet import Fernet
+
 DB_PATH = "trades.db"
 _lock = threading.Lock()
+
+
+def _get_fernet() -> Fernet:
+    """Derive a stable Fernet key from HEXIS_ENCRYPTION_KEY or FLASK_SECRET_KEY."""
+    raw = os.getenv("HEXIS_ENCRYPTION_KEY") or os.getenv("FLASK_SECRET_KEY") or "hexis-default-key-change-in-prod"
+    key_bytes = hashlib.sha256(raw.encode()).digest()   # 32 bytes
+    return Fernet(base64.urlsafe_b64encode(key_bytes))
+
+
+def _encrypt(plaintext: str) -> str:
+    return _get_fernet().encrypt(plaintext.encode()).decode()
+
+
+def _decrypt(token: str) -> str:
+    return _get_fernet().decrypt(token.encode()).decode()
 
 
 def init_db():
@@ -54,6 +73,22 @@ def init_db():
         _add_column_if_missing(conn, "trades", "leverage",         "INTEGER")
         _add_column_if_missing(conn, "trades", "trail_activated",  "INTEGER DEFAULT 0")
         _add_column_if_missing(conn, "trades", "trail_stop",       "REAL")
+        _add_column_if_missing(conn, "trades", "user_id",          "INTEGER")
+
+        # ── Users table ──────────────────────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                username       TEXT UNIQUE NOT NULL,
+                email          TEXT,
+                password_hash  TEXT NOT NULL,
+                api_key_enc    TEXT,        -- Fernet-encrypted Bitunix API key
+                secret_key_enc TEXT,        -- Fernet-encrypted Bitunix secret
+                is_admin       INTEGER DEFAULT 0,
+                is_active      INTEGER DEFAULT 1,
+                created_at     TEXT NOT NULL
+            )
+        """)
         conn.commit()
 
 
@@ -178,24 +213,33 @@ def get_trade(trade_id: str) -> dict | None:
         return dict(row) if row else None
 
 
-def get_all_trades(limit: int = 200) -> list[dict]:
-    """Returns all trades, newest first."""
+def get_all_trades(limit: int = 200, user_id: int = None) -> list[dict]:
+    """Returns all trades, newest first. Optionally filtered by user_id."""
     with _connect() as conn:
-        rows = conn.execute(
-            "SELECT * FROM trades ORDER BY entry_time DESC LIMIT ?", (limit,)
-        ).fetchall()
+        if user_id is not None:
+            rows = conn.execute(
+                "SELECT * FROM trades WHERE user_id = ? ORDER BY entry_time DESC LIMIT ?",
+                (user_id, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM trades ORDER BY entry_time DESC LIMIT ?", (limit,)
+            ).fetchall()
         return [dict(r) for r in rows]
 
 
-def get_stats() -> dict:
-    """Calculates aggregated statistics."""
+def get_stats(user_id: int = None) -> dict:
+    """Calculates aggregated statistics, optionally filtered by user_id."""
+    uid_filter = "AND user_id = ?" if user_id is not None else ""
+    uid_args   = (user_id,) if user_id is not None else ()
     with _connect() as conn:
         open_count = conn.execute(
-            "SELECT COUNT(*) FROM trades WHERE status = 'open'"
+            f"SELECT COUNT(*) FROM trades WHERE status = 'open' {uid_filter}", uid_args
         ).fetchone()[0]
 
         closed = conn.execute(
-            "SELECT * FROM trades WHERE status != 'open' AND pnl_usdt IS NOT NULL"
+            f"SELECT * FROM trades WHERE status != 'open' AND pnl_usdt IS NOT NULL {uid_filter}",
+            uid_args,
         ).fetchall()
 
         total_trades = len(closed)
@@ -475,3 +519,70 @@ def get_analytics() -> dict:
                 "total_pnl":        round(total_pnl, 2),
             },
         }
+
+
+# ── User management ──────────────────────────────────────────────────────────
+
+def create_user(username: str, password_hash: str, email: str = None, is_admin: bool = False) -> int:
+    """Insert a new user. Returns the new row id."""
+    with _connect() as conn:
+        cur = conn.execute(
+            """INSERT INTO users (username, email, password_hash, is_admin, created_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (username, email, password_hash, 1 if is_admin else 0, datetime.utcnow().isoformat()),
+        )
+        conn.commit()
+        return cur.lastrowid
+
+
+def get_user_by_username(username: str) -> Optional[dict]:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_user_by_id(user_id: int) -> Optional[dict]:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_all_users() -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute("SELECT id, username, email, is_admin, is_active, created_at FROM users ORDER BY id").fetchall()
+        return [dict(r) for r in rows]
+
+
+def count_users() -> int:
+    with _connect() as conn:
+        return conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+
+
+def update_user_api_keys(user_id: int, api_key: str, secret_key: str):
+    """Store Fernet-encrypted Bitunix credentials for a user."""
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE users SET api_key_enc = ?, secret_key_enc = ? WHERE id = ?",
+            (_encrypt(api_key), _encrypt(secret_key), user_id),
+        )
+        conn.commit()
+
+
+def get_users_with_api_keys() -> list[dict]:
+    """Return all active users that have API keys set, with decrypted keys."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM users WHERE is_active = 1 AND api_key_enc IS NOT NULL AND secret_key_enc IS NOT NULL"
+        ).fetchall()
+    result = []
+    for row in rows:
+        try:
+            result.append({
+                "id":       row["id"],
+                "username": row["username"],
+                "api_key":  _decrypt(row["api_key_enc"]),
+                "secret":   _decrypt(row["secret_key_enc"]),
+            })
+        except Exception:
+            pass  # skip users with corrupted/old encrypted keys
+    return result

@@ -10,6 +10,7 @@ import logging
 import os
 import secrets
 from flask import Flask, render_template, jsonify, request, Response, redirect, url_for, session
+from werkzeug.security import generate_password_hash, check_password_hash
 import database as db
 import config
 import strategy_state
@@ -20,36 +21,84 @@ from indicators import klines_to_df, add_indicators
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY") or secrets.token_hex(32)
 
-# ---- Session Auth ----------------------------------------------------------
-_AUTH_ENABLED = bool(config.DASHBOARD_USER and config.DASHBOARD_PASSWORD)
-_PUBLIC_ROUTES = {"login", "static"}
+# ── Auth (DB-based) ──────────────────────────────────────────────────────────
+_PUBLIC_ROUTES = {"login", "register", "static"}
 
 @app.before_request
 def check_auth():
-    """Redirect to login page unless the user has an active session."""
-    if not _AUTH_ENABLED:
-        return
     if request.endpoint in _PUBLIC_ROUTES:
         return
-    if not session.get("logged_in"):
+    if not session.get("user_id"):
         return redirect(url_for("login", next=request.path))
+
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
     error = None
     if request.method == "POST":
-        user = request.form.get("username", "")
-        pw   = request.form.get("password", "")
-        if user == config.DASHBOARD_USER and pw == config.DASHBOARD_PASSWORD:
-            session["logged_in"] = True
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        user = db.get_user_by_username(username)
+        if user and check_password_hash(user["password_hash"], password):
+            session["user_id"]   = user["id"]
+            session["username"]  = user["username"]
+            session["is_admin"]  = bool(user["is_admin"])
             return redirect(request.args.get("next") or url_for("index"))
-        error = "Invalid credentials."
+        error = "Invalid username or password."
     return render_template("login.html", error=error)
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    error = None
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        email    = request.form.get("email", "").strip() or None
+        password = request.form.get("password", "")
+        confirm  = request.form.get("confirm", "")
+
+        if not username or not password:
+            error = "Username and password are required."
+        elif len(password) < 8:
+            error = "Password must be at least 8 characters."
+        elif password != confirm:
+            error = "Passwords do not match."
+        elif db.get_user_by_username(username):
+            error = "Username already taken."
+        else:
+            is_admin = db.count_users() == 0   # first user becomes admin
+            pw_hash  = generate_password_hash(password)
+            user_id  = db.create_user(username, pw_hash, email, is_admin)
+            session["user_id"]  = user_id
+            session["username"] = username
+            session["is_admin"] = is_admin
+            return redirect(url_for("index"))
+    return render_template("register.html", error=error)
+
 
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+@app.route("/api/user/keys", methods=["GET", "POST"])
+def api_user_keys():
+    """Get or update the logged-in user's Bitunix API credentials."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "not logged in"}), 401
+    if request.method == "POST":
+        data   = request.get_json(force=True) or {}
+        api_key = data.get("api_key", "").strip()
+        secret  = data.get("secret_key", "").strip()
+        if not api_key or not secret:
+            return jsonify({"error": "api_key and secret_key required"}), 400
+        db.update_user_api_keys(user_id, api_key, secret)
+        return jsonify({"ok": True})
+    user = db.get_user_by_id(user_id)
+    has_keys = bool(user and user.get("api_key_enc"))
+    return jsonify({"has_keys": has_keys, "username": user["username"] if user else ""})
 
 _client = BitunixClient(config.API_KEY, config.SECRET_KEY)
 
@@ -274,16 +323,25 @@ def _start_background_sync():
     t.start()
 
 
+def _current_user_id():
+    """Return the logged-in user's id, or None for unauthenticated/admin views."""
+    uid = session.get("user_id")
+    # Admins see all trades; regular users see only their own
+    if session.get("is_admin"):
+        return None
+    return uid
+
+
 @app.route("/api/stats")
 def api_stats():
     _sync_open_trades()
-    return jsonify(db.get_stats())
+    return jsonify(db.get_stats(user_id=_current_user_id()))
 
 
 @app.route("/api/trades")
 def api_trades():
     _sync_open_trades()
-    trades = db.get_all_trades(limit=200)
+    trades = db.get_all_trades(limit=200, user_id=_current_user_id())
     return jsonify(trades)
 
 

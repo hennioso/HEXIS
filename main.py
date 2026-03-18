@@ -400,6 +400,142 @@ def agent_scanner_loop(
         stop_event.wait(config.LOOP_INTERVAL_SECONDS)
 
 
+import database as db   # noqa: E402 (needed for user manager)
+
+# ── Per-user thread registry ─────────────────────────────────────────────────
+_user_instances: dict[int, dict] = {}   # user_id → {stop: Event, threads: list}
+_instances_lock = threading.Lock()
+
+
+def _make_risk_managers():
+    """Create a fresh set of RiskManager instances (one per strategy)."""
+    rm_trend = RiskManager(
+        position_margin_pct=config.POSITION_MARGIN_PCT,
+        risk_per_trade=config.RISK_PER_TRADE,
+        stop_loss_pct=config.STOP_LOSS_PCT,
+        take_profit_pct=config.TAKE_PROFIT_PCT,
+        leverage=config.LEVERAGE,
+        max_margin_usdt=config.MAX_MARGIN_USDT,
+        max_margin_trades=config.MAX_MARGIN_TRADES,
+        max_margin_pct=config.MAX_MARGIN_PCT,
+    )
+    rm_scalp = RiskManager(
+        position_margin_pct=config.POSITION_MARGIN_PCT,
+        risk_per_trade=config.RISK_PER_TRADE,
+        stop_loss_pct=config.SCALP_STOP_LOSS_PCT,
+        take_profit_pct=config.SCALP_TAKE_PROFIT_PCT,
+        leverage=config.LEVERAGE,
+        max_margin_usdt=config.MAX_MARGIN_USDT,
+        max_margin_trades=config.MAX_MARGIN_TRADES,
+        max_margin_pct=config.MAX_MARGIN_PCT,
+    )
+    rm_fib = RiskManager(
+        position_margin_pct=config.POSITION_MARGIN_PCT,
+        risk_per_trade=config.RISK_PER_TRADE,
+        stop_loss_pct=config.FIB_STOP_LOSS_PCT,
+        take_profit_pct=config.FIB_TAKE_PROFIT_PCT,
+        leverage=config.LEVERAGE,
+        max_margin_usdt=config.MAX_MARGIN_USDT,
+        max_margin_trades=config.MAX_MARGIN_TRADES,
+        max_margin_pct=config.MAX_MARGIN_PCT,
+    )
+    return {
+        "trend":  rm_trend,
+        "scalp":  rm_scalp,
+        "sniper": rm_fib,
+        "lsob":   rm_fib,
+        "fvg":    rm_fib,
+    }
+
+
+def _start_user_trading(user: dict, global_stop: threading.Event):
+    """Start all trading threads for a registered user with their own API keys."""
+    uid      = user["id"]
+    username = user["username"]
+    log      = logging.getLogger(f"user.{username}")
+
+    try:
+        client = BitunixClient(user["api_key"], user["secret"])
+        balance_data = client.get_balance("USDT")
+        log.info(f"User '{username}' connected | available: {float(balance_data.get('available', 0)):.2f} USDT")
+    except Exception as e:
+        log.warning(f"User '{username}' API keys failed: {e} — skipping.")
+        return
+
+    stop_event   = threading.Event()
+    risk_managers = _make_risk_managers()
+    threads      = []
+
+    # Agent scanner
+    scanner = threading.Thread(
+        target=agent_scanner_loop,
+        args=(client, risk_managers, stop_event),
+        name=f"AgentScanner-{uid}",
+        daemon=True,
+    )
+    threads.append(scanner)
+    scanner.start()
+
+    # Per-symbol loops
+    for symbol, strategy in zip(config.SYMBOLS, config.STRATEGIES):
+        rm = risk_managers.get(strategy, risk_managers["trend"])
+        t = threading.Thread(
+            target=symbol_loop,
+            args=(symbol, strategy, client, rm, stop_event),
+            name=f"{symbol}-{uid}",
+            daemon=True,
+        )
+        threads.append(t)
+        t.start()
+        time.sleep(0.5)
+
+    with _instances_lock:
+        _user_instances[uid] = {"stop": stop_event, "threads": threads}
+    log.info(f"Trading started for user '{username}'.")
+
+
+def _stop_user_trading(user_id: int):
+    with _instances_lock:
+        entry = _user_instances.pop(user_id, None)
+    if entry:
+        entry["stop"].set()
+        logging.getLogger("UserManager").info(f"Stopped trading for user_id={user_id}.")
+
+
+def user_manager_loop(global_stop: threading.Event):
+    """
+    Background loop: detects registered users with API keys and starts/stops
+    their individual trading instances automatically.
+    """
+    log = logging.getLogger("UserManager")
+    known: set[int] = set()
+
+    while not global_stop.is_set():
+        try:
+            active_users = db.get_users_with_api_keys()
+            active_ids   = {u["id"] for u in active_users}
+
+            # Start new users
+            for user in active_users:
+                uid = user["id"]
+                if uid not in known:
+                    log.info(f"New user with API keys: '{user['username']}' — starting trading.")
+                    _start_user_trading(user, global_stop)
+                    known.add(uid)
+
+            # Stop removed/deactivated users
+            with _instances_lock:
+                running_ids = set(_user_instances.keys())
+            for uid in running_ids - active_ids:
+                _stop_user_trading(uid)
+                known.discard(uid)
+
+        except Exception as e:
+            log.error(f"User manager error: {e}", exc_info=True)
+
+        global_stop.wait(60)   # check every 60 seconds
+
+
 def main():
     logger.info("=" * 60)
     logger.info("  HEXIS – Autonomous Crypto Agent")
@@ -419,6 +555,7 @@ def main():
 
     # Three RiskManager instances – one per strategy
     risk_manager_trend = RiskManager(
+        position_margin_pct=config.POSITION_MARGIN_PCT,
         risk_per_trade=config.RISK_PER_TRADE,
         stop_loss_pct=config.STOP_LOSS_PCT,
         take_profit_pct=config.TAKE_PROFIT_PCT,
@@ -428,6 +565,7 @@ def main():
         max_margin_pct=config.MAX_MARGIN_PCT,
     )
     risk_manager_scalp = RiskManager(
+        position_margin_pct=config.POSITION_MARGIN_PCT,
         risk_per_trade=config.RISK_PER_TRADE,
         stop_loss_pct=config.SCALP_STOP_LOSS_PCT,
         take_profit_pct=config.SCALP_TAKE_PROFIT_PCT,
@@ -453,6 +591,7 @@ def main():
     threads = []
 
     risk_manager_fib = RiskManager(
+        position_margin_pct=config.POSITION_MARGIN_PCT,
         risk_per_trade=config.RISK_PER_TRADE,
         stop_loss_pct=config.FIB_STOP_LOSS_PCT,
         take_profit_pct=config.FIB_TAKE_PROFIT_PCT,
@@ -490,6 +629,16 @@ def main():
     )
     threads.append(analyst_thread)
     analyst_thread.start()
+
+    # Start the User Manager (starts/stops trading instances for registered users)
+    user_mgr_thread = threading.Thread(
+        target=user_manager_loop,
+        args=(stop_event,),
+        name="UserManager",
+        daemon=True,
+    )
+    threads.append(user_mgr_thread)
+    user_mgr_thread.start()
 
     # Start per-symbol threads for non-AUTO strategies
     # (AUTO symbols are skipped inside symbol_loop; the scanner handles them)
