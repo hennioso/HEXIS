@@ -59,7 +59,8 @@ def add_indicators(df: pd.DataFrame, fast_ema: int = 9, slow_ema: int = 21, rsi_
     df["ema_bull"] = df["ema_fast"] > df["ema_slow"]
 
     # Crossover signals: True only in the candle where the crossover occurs
-    prev_bull = df["ema_bull"].shift(1).fillna(False).astype(bool)
+    # fill_value=False avoids fillna downcasting FutureWarning
+    prev_bull = df["ema_bull"].shift(1, fill_value=False)
     df["ema_cross_up"]   = df["ema_bull"] & ~prev_bull
     df["ema_cross_down"] = ~df["ema_bull"] & prev_bull
 

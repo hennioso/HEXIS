@@ -21,6 +21,7 @@ from indicators import (
     ema,
 )
 from strategy_lsob import check_lsob_signal, OB_LOOKBACK, OB_SCAN_DEPTH
+from strategy_scalp import check_scalp_signal
 from strategy_fvg import check_fvg_signal
 
 log = logging.getLogger(__name__)
@@ -153,55 +154,40 @@ def _score_lsob(klines) -> tuple[int, list[str]]:
     return score, reasons
 
 
-def _score_scalp(df5m) -> tuple[int, list[str]]:
+def _score_scalp(klines) -> tuple[int, list[str]]:
     """
-    High score when RSI is extreme AND price is at a Bollinger Band edge,
-    signalling potential mean-reversion.
+    Calls check_scalp_signal directly — guarantees scorer and entry check
+    use identical criteria (closed candle, RSI direction, same thresholds).
+    Max score: 9 (4 base + 3 RSI quality + 2 volume quality).
     """
-    score = 0
-    reasons: list[str] = []
-
     try:
-        df = add_scalp_indicators(df5m.copy())
-        if len(df) < 25:
-            return 0, ["insufficient data"]
+        signal = check_scalp_signal(klines_5m=klines)
+        if not signal:
+            return 0, ["no active SCALP signal"]
 
-        last = df.iloc[-1]
+        score = 4
+        reasons = [
+            f"SCALP {signal.direction.upper()} | "
+            f"RSI(7)={signal.rsi_7:.1f} | BB%={signal.bb_pct:.2f}"
+        ]
 
-        rsi_val  = float(last["rsi_scalp"])
-        bb_pct   = float(last["bb_pct"])
-        vol_r    = float(last["vol_ratio"])
-        bb_width = float(last["bb_width"])
-
-        # RSI extreme
-        if rsi_val < 25 or rsi_val > 75:
-            score += 4
-            reasons.append(f"RSI extreme ({rsi_val:.1f})")
-        elif rsi_val < 35 or rsi_val > 65:
-            score += 2
-            reasons.append(f"RSI elevated ({rsi_val:.1f})")
-
-        # Bollinger Band edge
-        if bb_pct < 0.10 or bb_pct > 0.90:
+        # RSI quality
+        extreme = (signal.direction == "long"  and signal.rsi_7 < 25) or \
+                  (signal.direction == "short" and signal.rsi_7 > 75)
+        if extreme:
             score += 3
-            reasons.append(f"BB edge ({bb_pct:.2f})")
-        elif bb_pct < 0.20 or bb_pct > 0.80:
+            reasons.append(f"RSI extreme ({signal.rsi_7:.1f})")
+        else:
             score += 1
-            reasons.append(f"BB near edge ({bb_pct:.2f})")
+            reasons.append(f"RSI elevated ({signal.rsi_7:.1f})")
 
-        # Volume confirmation
-        if vol_r > 2.0:
+        # Volume quality
+        if signal.vol_ratio > 2.0:
             score += 2
-            reasons.append(f"high volume ({vol_r:.1f}x avg)")
-        elif vol_r > 1.5:
+            reasons.append(f"high volume ({signal.vol_ratio:.1f}x avg)")
+        elif signal.vol_ratio > 1.5:
             score += 1
-            reasons.append(f"elevated volume ({vol_r:.1f}x avg)")
-
-        # Penalize if BB is very narrow (no volatility = no mean reversion)
-        close_price = float(df.iloc[-1]["close"])
-        if close_price > 0 and bb_width / close_price < 0.005:
-            score -= 2
-            reasons.append("BB too narrow (low vol penalty)")
+            reasons.append(f"elevated volume ({signal.vol_ratio:.1f}x avg)")
 
     except Exception as e:
         return 0, [f"error: {e}"]
@@ -327,7 +313,7 @@ def select_strategy(
     scores = {
         "sniper": _score_sniper(df5m, df15m),
         "lsob":   _score_lsob(klines_5m),
-        "scalp":  _score_scalp(df5m),
+        "scalp":  _score_scalp(klines_5m),
         "trend":  _score_trend(df5m, df15m),
         "fvg":    _score_fvg(klines_5m, klines_15m),
     }

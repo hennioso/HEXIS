@@ -58,7 +58,7 @@ def scan_opportunities(
             # SNIPER uses 15m klines — same timeframe as the entry check in main.py
             "sniper": _score_sniper(df15m if df15m is not None else df5m, df15m),
             "lsob":   _score_lsob(klines_5m),
-            "scalp":  _score_scalp(df5m),
+            "scalp":  _score_scalp(klines_5m),
             "trend":  _score_trend(df5m, df15m),
             # FVG uses 15m klines for meaningful gap sizes
             "fvg":    _score_fvg(klines_15m if klines_15m else klines_5m, klines_15m),
