@@ -876,9 +876,100 @@
     <button id="notify-btn" onclick="requestNotifications()" style="display:none;padding:4px 10px;font-size:11px;background:rgba(88,166,255,0.1);color:#58a6ff;border:1px solid rgba(88,166,255,0.3);border-radius:6px;cursor:pointer;white-space:nowrap">🔔</button>
     <button id="sync-btn" onclick="syncClosed()" style="padding:4px 10px;font-size:11px;background:rgba(63,185,80,0.1);color:#3fb950;border:1px solid rgba(63,185,80,0.3);border-radius:6px;cursor:pointer;white-space:nowrap">⟳ Sync</button>
     <span class="refresh-info" id="last-update" style="white-space:nowrap">Loading...</span>
+    <button onclick="openSettings()" style="padding:4px 10px;font-size:11px;background:rgba(139,148,158,0.1);color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;white-space:nowrap" title="API Keys / Settings">⚙</button>
     <a href="/logout" style="padding:4px 10px;font-size:11px;background:rgba(139,148,158,0.1);color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;text-decoration:none;white-space:nowrap">⎋</a>
   </div>
 </header>
+
+<!-- Settings Modal -->
+<div id="settings-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#161b22;border:1px solid #30363d;border-radius:14px;padding:28px;width:100%;max-width:420px;margin:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <h3 style="font-size:16px;font-weight:600">⚙ API Key Settings</h3>
+      <button onclick="closeSettings()" style="background:none;border:none;color:#8b949e;font-size:20px;cursor:pointer;line-height:1">×</button>
+    </div>
+    <p style="font-size:12px;color:#8b949e;margin-bottom:18px;line-height:1.5">
+      Enter your Bitunix Futures API credentials. Keys are encrypted and stored securely.
+    </p>
+    <div id="settings-status" style="display:none;padding:8px 12px;border-radius:6px;font-size:13px;margin-bottom:14px"></div>
+    <div style="margin-bottom:14px">
+      <label style="display:block;font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">API Key</label>
+      <input id="settings-api-key" type="password" placeholder="Bitunix API Key"
+        style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:9px 12px;color:#e6edf3;font-size:14px;font-family:monospace"/>
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="display:block;font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Secret Key</label>
+      <input id="settings-secret-key" type="password" placeholder="Bitunix Secret Key"
+        style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:9px 12px;color:#e6edf3;font-size:14px;font-family:monospace"/>
+    </div>
+    <button onclick="saveApiKeys()"
+      style="width:100%;padding:10px;background:#3fb950;color:#000;font-weight:700;font-size:14px;border:none;border-radius:8px;cursor:pointer">
+      Save Keys
+    </button>
+  </div>
+</div>
+
+<script>
+function openSettings() {
+  fetch('/api/user/keys').then(r => r.json()).then(d => {
+    const modal = document.getElementById('settings-modal');
+    modal.style.display = 'flex';
+    const status = document.getElementById('settings-status');
+    if (d.has_keys) {
+      status.style.display = 'block';
+      status.style.background = 'rgba(63,185,80,0.1)';
+      status.style.border = '1px solid rgba(63,185,80,0.3)';
+      status.style.color = '#3fb950';
+      status.textContent = '✓ API keys are saved. Enter new keys below to update.';
+    } else {
+      status.style.display = 'none';
+    }
+  });
+}
+function closeSettings() {
+  document.getElementById('settings-modal').style.display = 'none';
+  document.getElementById('settings-status').style.display = 'none';
+  document.getElementById('settings-api-key').value = '';
+  document.getElementById('settings-secret-key').value = '';
+}
+function saveApiKeys() {
+  const api_key    = document.getElementById('settings-api-key').value.trim();
+  const secret_key = document.getElementById('settings-secret-key').value.trim();
+  const status     = document.getElementById('settings-status');
+  if (!api_key || !secret_key) {
+    status.style.display = 'block';
+    status.style.background = 'rgba(248,81,73,0.1)';
+    status.style.border = '1px solid rgba(248,81,73,0.3)';
+    status.style.color = '#f85149';
+    status.textContent = 'Both API key and Secret key are required.';
+    return;
+  }
+  fetch('/api/user/keys', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({api_key, secret_key})
+  }).then(r => r.json()).then(d => {
+    status.style.display = 'block';
+    if (d.ok) {
+      status.style.background = 'rgba(63,185,80,0.1)';
+      status.style.border = '1px solid rgba(63,185,80,0.3)';
+      status.style.color = '#3fb950';
+      status.textContent = '✓ Keys saved. Bot will start trading with your account within 60 seconds.';
+      document.getElementById('settings-api-key').value = '';
+      document.getElementById('settings-secret-key').value = '';
+    } else {
+      status.style.background = 'rgba(248,81,73,0.1)';
+      status.style.border = '1px solid rgba(248,81,73,0.3)';
+      status.style.color = '#f85149';
+      status.textContent = d.error || 'Failed to save keys.';
+    }
+  });
+}
+// Close on backdrop click
+document.getElementById('settings-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeSettings();
+});
+</script>
 
 <main>
 
