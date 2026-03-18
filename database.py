@@ -75,6 +75,29 @@ def init_db():
         _add_column_if_missing(conn, "trades", "trail_stop",       "REAL")
         _add_column_if_missing(conn, "trades", "user_id",          "INTEGER")
 
+        # One-time migration: retag mislabelled scalp trades
+        # (trades opened before strategy tag was passed explicitly kept trend_15m='scalp')
+        conn.execute("""
+            UPDATE trades
+            SET strategy = 'scalp'
+            WHERE trend_15m = 'scalp' AND (strategy = 'trend' OR strategy IS NULL)
+        """)
+        conn.commit()
+
+        # ── Invite codes table ───────────────────────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS invite_codes (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                code       TEXT UNIQUE NOT NULL,
+                email      TEXT,           -- recipient email (for display)
+                used       INTEGER DEFAULT 0,
+                used_by    INTEGER,        -- user_id that redeemed it
+                created_at TEXT NOT NULL,
+                expires_at TEXT            -- NULL = never expires
+            )
+        """)
+        conn.commit()
+
         # ── Users table ──────────────────────────────────────────────────────
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -586,3 +609,38 @@ def get_users_with_api_keys() -> list[dict]:
         except Exception:
             pass  # skip users with corrupted/old encrypted keys
     return result
+
+
+# ── Invite-code management ────────────────────────────────────────────────────
+
+def create_invite_code(code: str, email: str = None, expires_at: str = None) -> int:
+    with _connect() as conn:
+        cur = conn.execute(
+            "INSERT INTO invite_codes (code, email, created_at, expires_at) VALUES (?,?,?,?)",
+            (code, email, datetime.utcnow().isoformat(), expires_at),
+        )
+        conn.commit()
+        return cur.lastrowid
+
+
+def get_invite_code(code: str) -> Optional[dict]:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM invite_codes WHERE code = ?", (code,)).fetchone()
+        return dict(row) if row else None
+
+
+def use_invite_code(code: str, user_id: int):
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE invite_codes SET used = 1, used_by = ? WHERE code = ?",
+            (user_id, code),
+        )
+        conn.commit()
+
+
+def get_all_invite_codes() -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM invite_codes ORDER BY created_at DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]

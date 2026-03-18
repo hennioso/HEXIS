@@ -2,6 +2,10 @@
   <img src="static/logo.svg" alt="HEXIS Logo" width="480"/>
 </p>
 
+> ⚠️ **Disclaimer:** HEXIS is an algorithmic trading tool for informational and automation purposes only. It does **not** constitute financial advice, investment advice, or a recommendation to buy or sell any asset. Cryptocurrency and futures trading involves **substantial risk of loss** and is not suitable for all investors. Past performance does not guarantee future results. You may lose all of your invested capital. Only trade with funds you can afford to lose completely. The developers of HEXIS accept no liability for any financial losses incurred through the use of this software.
+
+---
+
 # HEXIS – Autonomous Crypto Agent
 
 An autonomous futures trading agent for the **Bitunix** exchange. Trades multiple symbols in parallel using five strategies — trend-following, scalping, Fibonacci sniper, liquidity sweep orderblock, and fair value gap — with a live web dashboard, Telegram notifications, circuit breakers, and an **AI Trade Analyst** that automatically tunes parameters based on performance.

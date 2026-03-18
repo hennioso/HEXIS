@@ -189,10 +189,18 @@
       </div>
 
       <form method="POST">
-        <!-- Account credentials -->
+        {% if not first_user %}
+        <div class="field">
+          <label>Invite Code</label>
+          <input type="text" name="invite_code" autofocus autocomplete="off"
+                 placeholder="XXXX-XXXX-XX"
+                 style="font-family:monospace;letter-spacing:.08em;text-transform:uppercase" />
+        </div>
+        {% endif %}
         <div class="field">
           <label>Username</label>
-          <input type="text" name="username" autofocus autocomplete="username" placeholder="your_username" />
+          <input type="text" name="username" {% if first_user %}autofocus{% endif %}
+                 autocomplete="username" placeholder="your_username" />
         </div>
         <div class="field">
           <label>Email <span style="color:var(--muted);font-weight:400">(optional)</span></label>
@@ -213,6 +221,9 @@
 
     <div class="footer">
       Already have an account? <a href="{{ url_for('login') }}">Sign in</a>
+      {% if not first_user %}
+      &nbsp;·&nbsp; <a href="{{ url_for('checkout') }}">Buy Access</a>
+      {% endif %}
       &nbsp;·&nbsp;
       <a href="https://www.bitunix.com/register?inviteCode=vefzzy" target="_blank" rel="noopener">
         Register on Bitunix

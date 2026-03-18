@@ -9,20 +9,29 @@ import threading
 import logging
 import os
 import secrets
+import string
 from flask import Flask, render_template, jsonify, request, Response, redirect, url_for, session
 from werkzeug.security import generate_password_hash, check_password_hash
 import database as db
 import config
 import strategy_state
 import circuit_breaker
+import mailer
 from exchange import BitunixClient
 from indicators import klines_to_df, add_indicators
+
+try:
+    import stripe as _stripe
+    _stripe.api_key = config.STRIPE_SECRET_KEY
+    _STRIPE_ENABLED = bool(config.STRIPE_SECRET_KEY and config.STRIPE_PRICE_ID)
+except ImportError:
+    _STRIPE_ENABLED = False
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY") or secrets.token_hex(32)
 
 # ── Auth (DB-based) ──────────────────────────────────────────────────────────
-_PUBLIC_ROUTES = {"login", "register", "static"}
+_PUBLIC_ROUTES = {"login", "register", "checkout", "create_checkout_session", "stripe_webhook", "static"}
 
 @app.before_request
 def check_auth():
@@ -48,14 +57,23 @@ def login():
     return render_template("login.html", error=error)
 
 
+def _generate_invite_code(length: int = 10) -> str:
+    """Generate a random uppercase alphanumeric invite code."""
+    alphabet = string.ascii_uppercase + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     error = None
+    first_user = db.count_users() == 0  # first user gets admin without code
+
     if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        email    = request.form.get("email", "").strip() or None
-        password = request.form.get("password", "")
-        confirm  = request.form.get("confirm", "")
+        username    = request.form.get("username", "").strip()
+        email       = request.form.get("email", "").strip() or None
+        password    = request.form.get("password", "")
+        confirm     = request.form.get("confirm", "")
+        invite_code = request.form.get("invite_code", "").strip().upper()
 
         if not username or not password:
             error = "Username and password are required."
@@ -65,15 +83,128 @@ def register():
             error = "Passwords do not match."
         elif db.get_user_by_username(username):
             error = "Username already taken."
+        elif not first_user:
+            # Non-admin registrations require a valid unused invite code
+            code_row = db.get_invite_code(invite_code) if invite_code else None
+            if not code_row:
+                error = "Invalid invite code."
+            elif code_row["used"]:
+                error = "This invite code has already been used."
+            elif code_row.get("expires_at") and code_row["expires_at"] < \
+                    __import__("datetime").datetime.utcnow().isoformat():
+                error = "This invite code has expired."
+            else:
+                pw_hash = generate_password_hash(password)
+                user_id = db.create_user(username, pw_hash, email, is_admin=False)
+                db.use_invite_code(invite_code, user_id)
+                session["user_id"]  = user_id
+                session["username"] = username
+                session["is_admin"] = False
+                return redirect(url_for("index"))
         else:
-            is_admin = db.count_users() == 0   # first user becomes admin
-            pw_hash  = generate_password_hash(password)
-            user_id  = db.create_user(username, pw_hash, email, is_admin)
+            # First user → admin, no code required
+            pw_hash = generate_password_hash(password)
+            user_id = db.create_user(username, pw_hash, email, is_admin=True)
             session["user_id"]  = user_id
             session["username"] = username
-            session["is_admin"] = is_admin
+            session["is_admin"] = True
             return redirect(url_for("index"))
-    return render_template("register.html", error=error)
+
+    return render_template("register.html", error=error, first_user=first_user)
+
+
+# ── Admin: invite code management ────────────────────────────────────────────
+
+def _require_admin():
+    if not session.get("is_admin"):
+        return jsonify({"error": "admin only"}), 403
+    return None
+
+
+@app.route("/api/admin/invite", methods=["GET", "POST"])
+def api_admin_invite():
+    """GET: list all codes. POST: generate a new code and optionally email it."""
+    err = _require_admin()
+    if err:
+        return err
+
+    if request.method == "GET":
+        return jsonify(db.get_all_invite_codes())
+
+    data  = request.get_json(force=True) or {}
+    email = data.get("email", "").strip() or None
+    code  = _generate_invite_code()
+    db.create_invite_code(code, email)
+
+    sent = False
+    if email:
+        sent = mailer.send_invite_code(email, code)
+
+    return jsonify({"ok": True, "code": code, "email": email, "email_sent": sent})
+
+
+# ── Stripe payment gateway ────────────────────────────────────────────────────
+
+@app.route("/checkout")
+def checkout():
+    """Render the payment page (Stripe Checkout)."""
+    return render_template(
+        "checkout.html",
+        stripe_publishable_key=config.STRIPE_PUBLISHABLE_KEY,
+        stripe_enabled=_STRIPE_ENABLED,
+    )
+
+
+@app.route("/api/create_checkout_session", methods=["POST"])
+def create_checkout_session():
+    """Create a Stripe Checkout session and return the URL."""
+    if not _STRIPE_ENABLED:
+        return jsonify({"error": "Payments not configured"}), 503
+    data  = request.get_json(force=True) or {}
+    email = data.get("email", "").strip() or None
+    try:
+        session_obj = _stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{"price": config.STRIPE_PRICE_ID, "quantity": 1}],
+            mode="payment",
+            customer_email=email,
+            success_url=config.HEXIS_BASE_URL + "/register?paid=1",
+            cancel_url=config.HEXIS_BASE_URL + "/checkout?cancelled=1",
+            metadata={"email": email or ""},
+        )
+        return jsonify({"url": session_obj.url})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/webhook/stripe", methods=["POST"])
+def stripe_webhook():
+    """Stripe sends payment events here. On success: generate + email invite code."""
+    if not _STRIPE_ENABLED:
+        return "", 200
+
+    payload    = request.get_data()
+    sig_header = request.headers.get("Stripe-Signature", "")
+    try:
+        event = _stripe.Webhook.construct_event(
+            payload, sig_header, config.STRIPE_WEBHOOK_SECRET
+        )
+    except Exception as e:
+        logging.getLogger("stripe").warning(f"Webhook signature failed: {e}")
+        return jsonify({"error": "invalid signature"}), 400
+
+    if event["type"] == "checkout.session.completed":
+        sess  = event["data"]["object"]
+        email = sess.get("customer_email") or sess.get("metadata", {}).get("email") or ""
+        code  = _generate_invite_code()
+        db.create_invite_code(code, email or None)
+        if email:
+            mailer.send_invite_code(email, code)
+        logging.getLogger("stripe").info(
+            f"Payment confirmed for {email or 'unknown'} — invite code: {code}"
+        )
+
+    return "", 200
 
 
 @app.route("/logout")

@@ -90,6 +90,22 @@ DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "")
 TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN",   "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
+# ---- Email (SMTP) ----------------------------------------------------------
+# Used to send invite codes. Leave empty to disable email sending.
+SMTP_HOST     = os.getenv("SMTP_HOST",     "smtp.gmail.com")
+SMTP_PORT     = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER     = os.getenv("SMTP_USER",     "")          # sender address
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")          # app password
+SMTP_FROM     = os.getenv("SMTP_FROM",     SMTP_USER)   # display sender
+
+# ---- Stripe Payments -------------------------------------------------------
+# Optional – leave empty to disable the payment/checkout flow.
+STRIPE_SECRET_KEY      = os.getenv("STRIPE_SECRET_KEY",      "")
+STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
+STRIPE_WEBHOOK_SECRET  = os.getenv("STRIPE_WEBHOOK_SECRET",  "")
+STRIPE_PRICE_ID        = os.getenv("STRIPE_PRICE_ID",        "")   # Stripe Price ID for HEXIS access
+HEXIS_BASE_URL         = os.getenv("HEXIS_BASE_URL",         "http://localhost:5000")
+
 # ---- Circuit Breakers ------------------------------------------------------
 # Pause ALL trading when today's realized PnL drops below this value (UTC day).
 DAILY_LOSS_LIMIT_USDT     = float(os.getenv("DAILY_LOSS_LIMIT_USDT",     "-30.0"))

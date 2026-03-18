@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HEXIS — Get Access</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --card: #161b22; --border: #30363d;
+      --text: #e6edf3; --muted: #8b949e; --green: #3fb950;
+      --red: #f85149; --accent: #58a6ff;
+    }
+    body { background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .wrap { width: 100%; max-width: 440px; padding: 20px; }
+    .logo { text-align: center; margin-bottom: 32px; }
+    .logo h1 { font-size: 26px; font-weight: 700; letter-spacing: .06em; }
+    .logo p  { color: var(--muted); font-size: 13px; margin-top: 6px; }
+    .card { background: var(--card); border: 1px solid var(--border);
+            border-radius: 14px; padding: 32px 28px; }
+    .card h2 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+    .card .sub { color: var(--muted); font-size: 13px; margin-bottom: 24px; line-height: 1.5; }
+    .price-box { background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; padding: 18px 20px; margin-bottom: 24px;
+      display: flex; align-items: center; justify-content: space-between; }
+    .price-label { font-size: 14px; color: var(--muted); }
+    .price-amount { font-size: 26px; font-weight: 700; color: var(--green); }
+    .price-note { font-size: 11px; color: var(--muted); margin-top: 2px; text-align: right; }
+    .features { margin-bottom: 24px; display: flex; flex-direction: column; gap: 10px; }
+    .feat { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; }
+    .feat-icon { color: var(--green); flex-shrink: 0; margin-top: 1px; }
+    .field { margin-bottom: 16px; }
+    .field label { display: block; font-size: 11px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
+    .field input { width: 100%; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 14px; color: var(--text); font-size: 15px; }
+    .field input:focus { outline: none; border-color: var(--accent); }
+    .btn { width: 100%; padding: 12px; background: var(--green); color: #000;
+      font-size: 15px; font-weight: 700; border: none; border-radius: 8px;
+      cursor: pointer; transition: opacity .15s; }
+    .btn:hover { opacity: .85; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .info-box { background: rgba(88,166,255,.07); border: 1px solid rgba(88,166,255,.25);
+      border-radius: 8px; padding: 12px 14px; font-size: 13px; color: var(--muted);
+      margin-bottom: 20px; line-height: 1.5; }
+    .error-box { background: rgba(248,81,73,.1); border: 1px solid rgba(248,81,73,.3);
+      border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--red);
+      margin-bottom: 16px; display: none; }
+    .footer { text-align: center; margin-top: 24px; font-size: 12px; color: var(--muted); }
+    .footer a { color: var(--accent); text-decoration: none; }
+    .disclaimer { font-size: 11px; color: var(--muted); margin-top: 20px;
+      padding-top: 16px; border-top: 1px solid var(--border); line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logo">
+      <svg viewBox="0 0 136 136" width="52" height="52" xmlns="http://www.w3.org/2000/svg" style="display:block;margin:0 auto 12px">
+        <polygon points="68,8 114,34 114,102 68,128 22,102 22,34" fill="none" stroke="#e8e6df" stroke-width="2"/>
+        <rect x="74" y="50" width="9" height="28" fill="none" stroke="#3fb950" stroke-width="1.4"/>
+        <rect x="91" y="42" width="9" height="30" fill="none" stroke="#3fb950" stroke-width="1.8"/>
+      </svg>
+      <h1>HEXIS</h1>
+      <p>Algorithmic Trading Agent</p>
+    </div>
+
+    <div class="card">
+      <h2>Get Access</h2>
+      <p class="sub">One-time payment — lifetime access to your personal HEXIS trading bot.</p>
+
+      <div class="price-box">
+        <div>
+          <div class="price-label">One-time fee</div>
+        </div>
+        <div style="text-align:right">
+          <div class="price-amount">€49</div>
+          <div class="price-note">incl. VAT · one-time</div>
+        </div>
+      </div>
+
+      <div class="features">
+        <div class="feat"><span class="feat-icon">✓</span> 5 algorithmic strategies (TREND, SCALP, SNIPER, LSOB, FVG)</div>
+        <div class="feat"><span class="feat-icon">✓</span> AI-powered trade analysis (Claude, GPT-4o, Gemini)</div>
+        <div class="feat"><span class="feat-icon">✓</span> Personal dashboard with live P&L</div>
+        <div class="feat"><span class="feat-icon">✓</span> Your own Bitunix API keys — full control</div>
+        <div class="feat"><span class="feat-icon">✓</span> Invite code emailed instantly after payment</div>
+      </div>
+
+      {% if stripe_enabled %}
+      <div id="error-box" class="error-box"></div>
+      <div class="field">
+        <label>Email for invite code</label>
+        <input type="email" id="email-input" placeholder="you@example.com" autocomplete="email" />
+      </div>
+      <button class="btn" id="checkout-btn" onclick="startCheckout()">
+        Pay with Card →
+      </button>
+      {% else %}
+      <div class="info-box">
+        Payment is not yet configured. Please contact the administrator to receive an invite code.
+      </div>
+      {% endif %}
+
+      <div class="disclaimer">
+        <strong>Risk Disclaimer:</strong> HEXIS is an algorithmic trading tool for informational
+        and automation purposes only. It does not constitute financial advice.
+        Cryptocurrency trading involves substantial risk of loss. Past performance
+        does not guarantee future results. Only trade with capital you can afford to lose.
+      </div>
+    </div>
+
+    <div class="footer">
+      Already have a code? <a href="{{ url_for('register') }}">Register</a>
+      &nbsp;·&nbsp; <a href="{{ url_for('login') }}">Sign in</a>
+    </div>
+  </div>
+
+  <script>
+  async function startCheckout() {
+    const btn   = document.getElementById('checkout-btn');
+    const email = document.getElementById('email-input').value.trim();
+    const errBox = document.getElementById('error-box');
+    errBox.style.display = 'none';
+    if (!email) { errBox.textContent = 'Please enter your email address.'; errBox.style.display = 'block'; return; }
+    btn.disabled = true;
+    btn.textContent = 'Redirecting…';
+    try {
+      const r = await fetch('/api/create_checkout_session', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({email})
+      });
+      const d = await r.json();
+      if (d.url) { window.location.href = d.url; }
+      else { errBox.textContent = d.error || 'Checkout failed.'; errBox.style.display = 'block'; btn.disabled = false; btn.textContent = 'Pay with Card →'; }
+    } catch(e) { errBox.textContent = 'Network error. Please try again.'; errBox.style.display = 'block'; btn.disabled = false; btn.textContent = 'Pay with Card →'; }
+  }
+  </script>
+</body>
+</html>
