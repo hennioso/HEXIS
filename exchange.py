@@ -310,6 +310,16 @@ class BitunixClient:
         except Exception:
             return []
 
+    def get_orderbook(self, symbol: str, limit: int = 5) -> dict:
+        """
+        Fetch the current order book (bids/asks) for a symbol.
+        Returns dict with keys 'bids' and 'asks', each a list of [price, qty] strings.
+        limit: depth levels to return (5, 10, 20, 50).
+        """
+        params = {"symbol": symbol, "limit": limit}
+        data = self._get("/api/v1/futures/market/depth", params=params)
+        return data.get("data", {"bids": [], "asks": []})
+
     def cancel_all_orders(self, symbol: str) -> dict:
         """Cancel all open orders for a symbol."""
         body = {"symbol": symbol}

@@ -135,6 +135,36 @@ CRYPTO_PRICE_USDT = float(os.getenv("CRYPTO_PRICE_USDT", "49.0"))
 # Legacy alias used in run.py start condition
 CRYPTO_WALLET_ADDRESS = CRYPTO_WALLET_TRX or CRYPTO_WALLET_EVM or CRYPTO_WALLET_SOL
 
+# ---- Agent Scanner – Advanced Filters -------------------------------------
+# Signal persistence: score must be >= MIN_OPEN_SCORE for this many consecutive
+# ticks before an order is placed. Prevents phantom signals (default 2).
+SIGNAL_STREAK_REQUIRED = int(os.getenv("SIGNAL_STREAK_REQUIRED", "2"))
+
+# ATR volatility filter: only trade when 15m ATR (as % of price) is in the
+# goldilocks zone — not too calm (fake breakouts), not too wild (blown SLs).
+ATR_FILTER_ENABLED = os.getenv("ATR_FILTER_ENABLED", "true").lower() == "true"
+ATR_MIN_PCT = float(os.getenv("ATR_MIN_PCT", "0.003"))   # 0.3% — too quiet
+ATR_MAX_PCT = float(os.getenv("ATR_MAX_PCT", "0.035"))   # 3.5% — too wild
+
+# BTC market bias: only take trades aligned with BTC's short-term trend
+# (EMA9 vs EMA21 on 15m). Set to "false" to disable.
+BTC_BIAS_ENABLED = os.getenv("BTC_BIAS_ENABLED", "true").lower() == "true"
+BTC_BIAS_SYMBOL  = os.getenv("BTC_BIAS_SYMBOL", "BTCUSDT")
+
+# Maximum concurrent open positions across all symbols.
+MAX_OPEN_POSITIONS = int(os.getenv("MAX_OPEN_POSITIONS", "2"))
+
+# Correlated symbol groups — at most one position per group at a time.
+# Prevents opening BTC long + ETH long simultaneously (same risk exposure).
+CORRELATION_GROUPS: list[list[str]] = [
+    ["BTCUSDT", "ETHUSDT"],   # highly correlated — treat as one basket
+]
+
+# Order-book depth: minimum combined USDT depth in top-5 bids/asks required
+# before placing an order. Protects against thin liquidity causing slippage.
+ORDER_BOOK_ENABLED  = os.getenv("ORDER_BOOK_ENABLED",  "true").lower() == "true"
+ORDER_BOOK_MIN_USDT = float(os.getenv("ORDER_BOOK_MIN_USDT", "50000"))  # $50k
+
 # ---- Circuit Breakers ------------------------------------------------------
 # Pause ALL trading when today's realized PnL drops below this value (UTC day).
 DAILY_LOSS_LIMIT_USDT     = float(os.getenv("DAILY_LOSS_LIMIT_USDT",     "-30.0"))

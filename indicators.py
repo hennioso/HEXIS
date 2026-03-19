@@ -143,6 +143,20 @@ def add_fib_indicators(
     return df
 
 
+def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    """
+    Average True Range (ATR) — measures recent volatility.
+    Uses EWM smoothing (same as Wilder's method with com=period-1).
+    """
+    prev_close = df["close"].shift(1)
+    tr = pd.concat([
+        df["high"] - df["low"],
+        (df["high"] - prev_close).abs(),
+        (df["low"]  - prev_close).abs(),
+    ], axis=1).max(axis=1)
+    return tr.ewm(com=period - 1, adjust=False).mean()
+
+
 def get_trend_direction(df: pd.DataFrame) -> Optional[str]:
     """
     Returns current trend direction: 'bull', 'bear', or None if unclear.

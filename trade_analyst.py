@@ -184,6 +184,16 @@ def _build_context(
 - Leverage: {config.LEVERAGE}x | Risk per trade: {config.RISK_PER_TRADE*100:.0f}% of balance
 - Agent Scanner: scores all (symbol × strategy) combos every 15s, opens order only if best score ≥ MIN_OPEN_SCORE
 
+## Active Pre-Entry Filters (may reduce trade frequency)
+- Signal persistence: score must hold ≥ MIN_OPEN_SCORE for {config.SIGNAL_STREAK_REQUIRED} consecutive ticks before entry
+- ATR volatility filter: {"ON" if config.ATR_FILTER_ENABLED else "OFF"} — only trade when 15m ATR is {config.ATR_MIN_PCT*100:.1f}%–{config.ATR_MAX_PCT*100:.1f}% of price (goldilocks zone)
+- BTC market bias: {"ON" if config.BTC_BIAS_ENABLED else "OFF"} — skips entries that go against BTC EMA9/EMA21 direction on 15m
+- Max concurrent positions: {config.MAX_OPEN_POSITIONS} (correlation groups: {config.CORRELATION_GROUPS})
+- Order book depth: {"ON" if config.ORDER_BOOK_ENABLED else "OFF"} — requires ≥ ${config.ORDER_BOOK_MIN_USDT:,.0f} USDT liquidity on each side before entry
+- Cooldown after close: {config.AGENT_COOLDOWN_SECONDS // 60} min per symbol
+
+Note: if trade frequency is low but scores look strong, these filters may be the cause rather than MIN_OPEN_SCORE being too high.
+
 ## Scoring System (max scores)
 - SNIPER (Fibonacci 0.882 retracement): max 10
 - LSOB (Liquidity Sweep Orderblock):    max  9

@@ -18,6 +18,7 @@ import strategy_state
 import strategy_scanner
 import trade_analyst
 import circuit_breaker
+import indicators as ind
 from exchange import BitunixClient
 from strategy import check_signal
 from strategy_scalp import check_scalp_signal, ScalpSignal
@@ -204,6 +205,34 @@ def symbol_loop(
         stop_event.wait(config.LOOP_INTERVAL_SECONDS)
 
 
+def _check_order_book(client: BitunixClient, symbol: str, log) -> bool:
+    """
+    Returns True when the order book has sufficient liquidity to absorb the order
+    without significant slippage. Returns True (allow) if order book check is
+    disabled or if the API call fails (fail-open rather than blocking all trades).
+    """
+    if not config.ORDER_BOOK_ENABLED:
+        return True
+    try:
+        book = client.get_orderbook(symbol, limit=5)
+        bids = book.get("bids", [])
+        asks = book.get("asks", [])
+        bid_depth = sum(float(b[0]) * float(b[1]) for b in bids if len(b) >= 2)
+        ask_depth = sum(float(a[0]) * float(a[1]) for a in asks if len(a) >= 2)
+        min_side = min(bid_depth, ask_depth)
+        if min_side < config.ORDER_BOOK_MIN_USDT:
+            log.info(
+                f"ORDER BOOK: {symbol} depth ${min_side:,.0f} < "
+                f"${config.ORDER_BOOK_MIN_USDT:,.0f} threshold — skipping."
+            )
+            return False
+        log.debug(f"Order book OK: {symbol} depth ${min_side:,.0f}")
+        return True
+    except Exception as exc:
+        log.debug(f"Order book check failed ({exc}) — proceeding.")
+        return True
+
+
 def agent_scanner_loop(
     client: BitunixClient,
     risk_managers: dict,
@@ -232,6 +261,9 @@ def agent_scanner_loop(
     # Cooldown tracking: after a position closes, block re-entry for AGENT_COOLDOWN_SECONDS
     _cooldown_until: dict[str, float] = {}   # sym → unix timestamp when cooldown expires
     _prev_had_position: dict[str, bool] = {sym: False for sym in config.SYMBOLS}
+
+    # Signal persistence: count consecutive ticks each (sym, strategy) scored above threshold
+    _score_streak: dict[tuple, int] = {}
 
     _consecutive_errors = 0   # suppress repeated identical error spam
 
@@ -300,19 +332,59 @@ def agent_scanner_loop(
             # ---- 5. Score all (symbol × strategy) combinations ----
             opps = strategy_scanner.scan_opportunities(candidates, klines_map)
 
-            # Log the top 5 scored setups for visibility
+            # ---- 5a. Update signal-persistence streaks ----------------------
+            # Combos above threshold get their streak incremented; all others reset.
+            scored_above = {
+                (o.symbol, o.strategy)
+                for o in opps if o.score >= strategy_scanner.MIN_OPEN_SCORE
+            }
+            for key in list(_score_streak.keys()):
+                if key not in scored_above:
+                    _score_streak[key] = 0
+            for key in scored_above:
+                _score_streak[key] = _score_streak.get(key, 0) + 1
+
+            # ---- 5b. BTC market bias (global directional filter) -----------
+            btc_bias: str | None = None  # 'long' | 'short' | None
+            if config.BTC_BIAS_ENABLED:
+                try:
+                    btc_sym = config.BTC_BIAS_SYMBOL
+                    # Reuse already-fetched klines if BTC is a candidate
+                    btc_klines = (
+                        klines_map[btc_sym]["15m"]
+                        if btc_sym in klines_map
+                        else client.get_klines(btc_sym, "15m", limit=50)
+                    )
+                    df_btc = ind.klines_to_df(btc_klines)
+                    ema9  = float(ind.ema(df_btc["close"], 9).iloc[-1])
+                    ema21 = float(ind.ema(df_btc["close"], 21).iloc[-1])
+                    btc_bias = "long" if ema9 > ema21 else "short"
+                    log.debug(f"BTC bias: {btc_bias.upper()} (EMA9={ema9:.2f} EMA21={ema21:.2f})")
+                except Exception as exc:
+                    log.debug(f"BTC bias fetch failed ({exc}) — bias disabled this tick.")
+
+            # ---- 5c. Count currently open positions (multi-position cap) ---
+            total_open = sum(
+                1 for sym in config.SYMBOLS if traders[sym].has_open_position()
+            )
+
+            # Log top 5 scored setups for visibility
             log.info(
                 f"Agent scan complete | {len(candidates)} symbols × 5 strategies | "
                 f"Top score: {opps[0].score if opps else 0} "
-                f"(threshold: {strategy_scanner.MIN_OPEN_SCORE})"
+                f"(threshold: {strategy_scanner.MIN_OPEN_SCORE}) | "
+                f"Open positions: {total_open}/{config.MAX_OPEN_POSITIONS} | "
+                f"BTC bias: {btc_bias or 'off'}"
             )
             for opp in opps[:5]:
+                key = (opp.symbol, opp.strategy)
+                streak = _score_streak.get(key, 0)
                 log.info(
-                    f"  {opp.symbol:<10} {opp.strategy.upper():<7} score={opp.score:2d} | "
-                    + ", ".join(opp.reasons[:2])
+                    f"  {opp.symbol:<10} {opp.strategy.upper():<7} score={opp.score:2d} "
+                    f"streak={streak} | " + ", ".join(opp.reasons[:2])
                 )
 
-            # ---- 6. Execute the best opportunity if above threshold ----
+            # ---- 6. Execute the best qualifying opportunity -----------------
             best = opps[0] if opps else None
             if not best or best.score < strategy_scanner.MIN_OPEN_SCORE:
                 if best:
@@ -323,9 +395,66 @@ def agent_scanner_loop(
                 stop_event.wait(config.LOOP_INTERVAL_SECONDS)
                 continue
 
+            # ---- Filter 1: Signal persistence (streak >= required) ----------
+            best_key = (best.symbol, best.strategy)
+            best_streak = _score_streak.get(best_key, 0)
+            if best_streak < config.SIGNAL_STREAK_REQUIRED:
+                log.info(
+                    f"AGENT: {best.symbol} {best.strategy.upper()} score={best.score} "
+                    f"— streak {best_streak}/{config.SIGNAL_STREAK_REQUIRED}, waiting."
+                )
+                stop_event.wait(config.LOOP_INTERVAL_SECONDS)
+                continue
+
+            # ---- Filter 2: Max open positions cap --------------------------
+            if total_open >= config.MAX_OPEN_POSITIONS:
+                log.info(
+                    f"AGENT: Max positions ({config.MAX_OPEN_POSITIONS}) reached "
+                    f"({total_open} open) — skipping entry."
+                )
+                stop_event.wait(config.LOOP_INTERVAL_SECONDS)
+                continue
+
+            # ---- Filter 3: Correlation diversity rule ----------------------
+            in_correlated_group = False
+            for group in config.CORRELATION_GROUPS:
+                if best.symbol in group:
+                    for peer in group:
+                        if peer != best.symbol and traders[peer].has_open_position():
+                            log.info(
+                                f"AGENT: {best.symbol} skipped — correlated peer "
+                                f"{peer} already has an open position."
+                            )
+                            in_correlated_group = True
+                            break
+                if in_correlated_group:
+                    break
+            if in_correlated_group:
+                stop_event.wait(config.LOOP_INTERVAL_SECONDS)
+                continue
+
+            # ---- Filter 4: ATR goldilocks zone (15m) -----------------------
+            if config.ATR_FILTER_ENABLED:
+                try:
+                    df15_atr = ind.klines_to_df(klines_map[best.symbol]["15m"])
+                    atr_val  = float(ind.atr(df15_atr).iloc[-1])
+                    price_now = float(df15_atr.iloc[-1]["close"])
+                    atr_pct  = atr_val / price_now
+                    if not (config.ATR_MIN_PCT <= atr_pct <= config.ATR_MAX_PCT):
+                        log.info(
+                            f"AGENT: {best.symbol} ATR {atr_pct*100:.2f}% outside "
+                            f"goldilocks [{config.ATR_MIN_PCT*100:.1f}%–{config.ATR_MAX_PCT*100:.1f}%] "
+                            f"— skipping."
+                        )
+                        stop_event.wait(config.LOOP_INTERVAL_SECONDS)
+                        continue
+                    log.debug(f"ATR filter OK: {best.symbol} ATR={atr_pct*100:.2f}%")
+                except Exception as exc:
+                    log.debug(f"ATR filter error ({exc}) — proceeding without filter.")
+
             log.info(
                 f"AGENT ENTRY → {best.symbol} {best.strategy.upper()} "
-                f"score={best.score} | {', '.join(best.reasons[:3])}"
+                f"score={best.score} streak={best_streak} | {', '.join(best.reasons[:3])}"
             )
 
             trader = traders[best.symbol]
@@ -345,7 +474,15 @@ def agent_scanner_loop(
                     klines_1h=klines_1h,
                 )
                 if sniper:
-                    trader.open_sniper_position(sniper)
+                    if btc_bias and sniper.direction != btc_bias:
+                        log.info(
+                            f"AGENT: {best.symbol} SNIPER {sniper.direction.upper()} "
+                            f"blocked by BTC bias ({btc_bias.upper()}) — skipping."
+                        )
+                    elif not _check_order_book(client, best.symbol, log):
+                        pass
+                    else:
+                        trader.open_sniper_position(sniper)
                 else:
                     log.info(
                         f"AGENT: {best.symbol} SNIPER scored {best.score} "
@@ -363,7 +500,15 @@ def agent_scanner_loop(
                     scan_depth=config.LSOB_SCAN_DEPTH,
                 )
                 if lsob:
-                    trader.open_lsob_position(lsob)
+                    if btc_bias and lsob.direction != btc_bias:
+                        log.info(
+                            f"AGENT: {best.symbol} LSOB {lsob.direction.upper()} "
+                            f"blocked by BTC bias ({btc_bias.upper()}) — skipping."
+                        )
+                    elif not _check_order_book(client, best.symbol, log):
+                        pass
+                    else:
+                        trader.open_lsob_position(lsob)
                 else:
                     log.info(
                         f"AGENT: {best.symbol} LSOB scored {best.score} "
@@ -381,15 +526,23 @@ def agent_scanner_loop(
                     vol_period=config.SCALP_VOL_PERIOD,
                 )
                 if scalp:
-                    signal = Signal(
-                        direction=scalp.direction,
-                        price=scalp.price,
-                        rsi_5m=scalp.rsi_7,
-                        ema_fast_5m=0,
-                        ema_slow_5m=0,
-                        trend_15m="scalp",
-                    )
-                    trader.open_position(signal, strategy="scalp")
+                    if btc_bias and scalp.direction != btc_bias:
+                        log.info(
+                            f"AGENT: {best.symbol} SCALP {scalp.direction.upper()} "
+                            f"blocked by BTC bias ({btc_bias.upper()}) — skipping."
+                        )
+                    elif not _check_order_book(client, best.symbol, log):
+                        pass
+                    else:
+                        signal = Signal(
+                            direction=scalp.direction,
+                            price=scalp.price,
+                            rsi_5m=scalp.rsi_7,
+                            ema_fast_5m=0,
+                            ema_slow_5m=0,
+                            trend_15m="scalp",
+                        )
+                        trader.open_position(signal, strategy="scalp")
                 else:
                     log.info(
                         f"AGENT: {best.symbol} SCALP scored {best.score} "
@@ -404,7 +557,15 @@ def agent_scanner_loop(
                     klines_15m=klines_15m,
                 )
                 if fvg:
-                    trader.open_fvg_position(fvg)
+                    if btc_bias and fvg.direction != btc_bias:
+                        log.info(
+                            f"AGENT: {best.symbol} FVG {fvg.direction.upper()} "
+                            f"blocked by BTC bias ({btc_bias.upper()}) — skipping."
+                        )
+                    elif not _check_order_book(client, best.symbol, log):
+                        pass
+                    else:
+                        trader.open_fvg_position(fvg)
                 else:
                     log.info(
                         f"AGENT: {best.symbol} FVG scored {best.score} "
@@ -421,7 +582,15 @@ def agent_scanner_loop(
                     rsi_period=config.RSI_PERIOD,
                 )
                 if signal:
-                    trader.open_position(signal, strategy="trend")
+                    if btc_bias and signal.direction != btc_bias:
+                        log.info(
+                            f"AGENT: {best.symbol} TREND {signal.direction.upper()} "
+                            f"blocked by BTC bias ({btc_bias.upper()}) — skipping."
+                        )
+                    elif not _check_order_book(client, best.symbol, log):
+                        pass
+                    else:
+                        trader.open_position(signal, strategy="trend")
                 else:
                     log.info(
                         f"AGENT: {best.symbol} TREND scored {best.score} "
