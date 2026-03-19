@@ -12,8 +12,8 @@ Restart=on-failure
 RestartSec=15s
 
 # Log to dedicated files (rotated by journald)
-StandardOutput=append:/home/henning/HEXIS/bot.log
-StandardError=append:/home/henning/HEXIS/bot.log
+StandardOutput=journal
+StandardError=journal
 
 # Graceful shutdown: give the bot 30s to close open positions / flush logs
 TimeoutStopSec=30

@@ -368,20 +368,28 @@ def agent_scanner_loop(
                 1 for sym in config.SYMBOLS if traders[sym].has_open_position()
             )
 
-            # Log top 5 scored setups for visibility
+            # Log best setup per symbol so all candidates are visible
+            best_per_sym: dict = {}
+            for _o in opps:
+                if _o.symbol not in best_per_sym:
+                    best_per_sym[_o.symbol] = _o
             log.info(
-                f"Agent scan complete | {len(candidates)} symbols × 5 strategies | "
+                f"Agent scan complete | {len(candidates)} symbols scanned | "
                 f"Top score: {opps[0].score if opps else 0} "
                 f"(threshold: {strategy_scanner.MIN_OPEN_SCORE}) | "
                 f"Open positions: {total_open}/{config.MAX_OPEN_POSITIONS} | "
                 f"BTC bias: {btc_bias or 'off'}"
             )
-            for opp in opps[:5]:
-                key = (opp.symbol, opp.strategy)
-                streak = _score_streak.get(key, 0)
+            for _sym in candidates:
+                _opp = best_per_sym.get(_sym)
+                if not _opp:
+                    continue
+                _key = (_opp.symbol, _opp.strategy)
+                _streak = _score_streak.get(_key, 0)
+                _marker = ">>>" if _opp.score >= strategy_scanner.MIN_OPEN_SCORE else "   "
                 log.info(
-                    f"  {opp.symbol:<10} {opp.strategy.upper():<7} score={opp.score:2d} "
-                    f"streak={streak} | " + ", ".join(opp.reasons[:2])
+                    f"{_marker} {_opp.symbol:<10} {_opp.strategy.upper():<7} score={_opp.score:2d} "
+                    f"streak={_streak} | " + ", ".join(_opp.reasons[:2])
                 )
 
             # ---- 6. Execute the best qualifying opportunity -----------------
