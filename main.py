@@ -229,6 +229,10 @@ def agent_scanner_loop(
     }
     log.info("Agent Scanner started — waiting for AUTO symbols.")
 
+    # Cooldown tracking: after a position closes, block re-entry for AGENT_COOLDOWN_SECONDS
+    _cooldown_until: dict[str, float] = {}   # sym → unix timestamp when cooldown expires
+    _prev_had_position: dict[str, bool] = {sym: False for sym in config.SYMBOLS}
+
     while not stop_event.is_set():
         try:
             # ---- 1. Determine which symbols are currently in AUTO mode ----
@@ -243,19 +247,39 @@ def agent_scanner_loop(
             # ---- 2. Monitor open positions ----
             for sym in auto_symbols:
                 trader = traders[sym]
-                if trader.has_open_position():
+                had_position = _prev_had_position[sym]
+                has_position = trader.has_open_position()
+
+                if has_position:
                     pos = trader.current_position
                     log.info(
                         f"{sym} | Position open | Side: {pos.get('side')} | "
                         f"Qty: {pos.get('qty')} | uPNL: {pos.get('unrealizedPNL', 'N/A')}"
                     )
                     trader.monitor_open_position()
+                elif had_position and config.AGENT_COOLDOWN_SECONDS > 0:
+                    # Position just closed this tick → start cooldown
+                    _cooldown_until[sym] = time.time() + config.AGENT_COOLDOWN_SECONDS
+                    log.info(
+                        f"AGENT: {sym} position closed — cooldown {config.AGENT_COOLDOWN_SECONDS}s "
+                        f"to prevent immediate re-entry."
+                    )
 
-            # ---- 3. Find candidates (AUTO + no open position) ----
-            candidates = [
-                sym for sym in auto_symbols
-                if not traders[sym].has_open_position()
-            ]
+                _prev_had_position[sym] = has_position
+
+            # ---- 3. Find candidates (AUTO + no open position + not in cooldown) ----
+            now = time.time()
+            candidates = []
+            for sym in auto_symbols:
+                if traders[sym].has_open_position():
+                    continue
+                cooldown_remaining = _cooldown_until.get(sym, 0) - now
+                if cooldown_remaining > 0:
+                    log.info(
+                        f"AGENT: {sym} in cooldown — {cooldown_remaining/60:.1f}min remaining, skipping."
+                    )
+                    continue
+                candidates.append(sym)
             if not candidates:
                 log.debug("All AUTO symbols have open positions — skipping scan.")
                 stop_event.wait(config.LOOP_INTERVAL_SECONDS)

@@ -79,6 +79,11 @@ LSOB_SCAN_DEPTH  = int(os.getenv("LSOB_SCAN_DEPTH", "25")) # how far back to sca
 # ---- Bot Behaviour ---------------------------------------------------------
 LOOP_INTERVAL_SECONDS = 15  # How often the bot checks prices (seconds)
 
+# After a position closes (TP or SL), the agent scanner will not re-enter
+# the same symbol for this many seconds. Prevents immediate re-entry into
+# the same setup that just lost. Set to 0 to disable.
+AGENT_COOLDOWN_SECONDS = int(os.getenv("AGENT_COOLDOWN_SECONDS", "1800"))  # 30 min
+
 # ---- Telegram Notifications ------------------------------------------------
 # Optional – leave empty to disable. See notifications.py for setup instructions.
 TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN",   "")
