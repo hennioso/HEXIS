@@ -1,0 +1,22 @@
+[Unit]
+Description=HEXIS Autonomous Crypto Trading Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=henning
+WorkingDirectory=/home/henning/HEXIS
+ExecStart=/usr/bin/python3 /home/henning/HEXIS/run.py
+Restart=on-failure
+RestartSec=15s
+
+# Log to dedicated files (rotated by journald)
+StandardOutput=append:/home/henning/HEXIS/bot.log
+StandardError=append:/home/henning/HEXIS/bot.log
+
+# Graceful shutdown: give the bot 30s to close open positions / flush logs
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
