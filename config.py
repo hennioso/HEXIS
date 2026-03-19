@@ -55,15 +55,20 @@ STRATEGIES = ["auto", "auto", "auto", "auto", "auto", "auto", "auto"]  # Agent M
 # Scalping-specific parameters (override SL/TP for scalp symbols)
 SCALP_STOP_LOSS_PCT    = float(os.getenv("SCALP_STOP_LOSS_PCT", "0.008"))   # 0.8%
 SCALP_TAKE_PROFIT_PCT  = float(os.getenv("SCALP_TAKE_PROFIT_PCT", "0.016")) # 1.6%
+# Max minutes a scalp may stay open before being force-closed at market.
+# Prevents short-term scalps from becoming unintended multi-hour swing trades.
+# Set to 0 to disable.
+SCALP_MAX_HOLD_MINUTES = int(os.getenv("SCALP_MAX_HOLD_MINUTES", "120"))    # 2 hours
 SCALP_BB_PERIOD        = 20
 SCALP_BB_STD           = 2.0
 SCALP_RSI_PERIOD       = 7
 SCALP_VOL_PERIOD       = 20
 
 # ---- SNIPER Strategy Parameters (Fibonacci Retracement) -------------------
-SNIPER_TF           = os.getenv("SNIPER_TF", "15m")                             # 15m candles for meaningful swings
+SNIPER_TF           = os.getenv("SNIPER_TF", "15m")                             # 15m candles for EMA trend filter
+SNIPER_1H_LIMIT     = int(os.getenv("SNIPER_1H_LIMIT", "80"))                   # 1H candles for swing detection (80h ≈ 3.3 days)
 SNIPER_KLINE_LIMIT  = int(os.getenv("SNIPER_KLINE_LIMIT", "120"))               # Fetch 120 candles (covers lookback + buffer)
-FIB_LOOKBACK        = int(os.getenv("FIB_LOOKBACK", "100"))                     # 100 × 15m = ~25 hours of swing history
+FIB_LOOKBACK        = int(os.getenv("FIB_LOOKBACK", "50"))                      # lookback on 1H chart (50 × 1H ≈ 2 days)
 FIB_STOP_LOSS_PCT   = float(os.getenv("FIB_STOP_LOSS_PCT",  "0.015"))           # 1.5% SL (standard levels)
 FIB_TAKE_PROFIT_PCT = float(os.getenv("FIB_TAKE_PROFIT_PCT", "0.030"))          # 3.0% TP (2:1 R:R)
 # Deep levels (0.882): SL is placed structurally at swing low/high ± 0.2%

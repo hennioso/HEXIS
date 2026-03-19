@@ -5,6 +5,7 @@ Executes orders and manages the current position.
 
 import logging
 import uuid
+from datetime import datetime
 from typing import Optional
 
 from exchange import BitunixClient
@@ -13,6 +14,7 @@ from risk_manager import RiskManager, TradeParams
 from strategy_sniper import SniperSignal
 from strategy_lsob import LSOBSignal
 from strategy_fvg import FVGSignal
+import config
 import database as db
 import notifications
 import circuit_breaker
@@ -793,6 +795,27 @@ class Trader:
         trade = db.get_trade(trade_id)
         if not trade:
             return
+
+        # ── Max hold-time exit for SCALP positions ────────────────────────────
+        # If a scalp is still open after SCALP_MAX_HOLD_MINUTES, close it at
+        # market to prevent a short-term trade turning into an unintended swing.
+        strategy = (trade.get("strategy") or "").lower()
+        if strategy == "scalp" and config.SCALP_MAX_HOLD_MINUTES > 0:
+            entry_time_str = trade.get("entry_time", "")
+            if entry_time_str:
+                try:
+                    entry_dt = datetime.fromisoformat(entry_time_str)
+                    elapsed  = (datetime.utcnow() - entry_dt).total_seconds() / 60
+                    if elapsed >= config.SCALP_MAX_HOLD_MINUTES:
+                        logger.info(
+                            f"SCALP max hold time reached ({elapsed:.0f} min ≥ "
+                            f"{config.SCALP_MAX_HOLD_MINUTES} min) — closing {self.symbol} at market"
+                        )
+                        close_side = "SELL" if trade["direction"] == "long" else "BUY"
+                        self._trail_close(trade_id, close_side)
+                        return
+                except Exception:
+                    pass
 
         try:
             ticker = self.client.get_ticker(self.symbol)

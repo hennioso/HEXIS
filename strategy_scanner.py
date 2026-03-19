@@ -51,12 +51,15 @@ def scan_opportunities(
     for symbol in symbols:
         klines_5m  = klines_map[symbol]["5m"]
         klines_15m = klines_map[symbol].get("15m")
+        klines_1h  = klines_map[symbol].get("1h")
         df5m  = klines_to_df(klines_5m)
         df15m = klines_to_df(klines_15m) if klines_15m else None
+        # SNIPER scoring: use 1H for swing detection when available
+        df_sniper = klines_to_df(klines_1h) if klines_1h else (df15m if df15m is not None else df5m)
 
         scores = {
-            # SNIPER uses 15m klines — same timeframe as the entry check in main.py
-            "sniper": _score_sniper(df15m if df15m is not None else df5m, df15m),
+            # SNIPER scores on 1H chart — same data used for entry check
+            "sniper": _score_sniper(df_sniper, df15m),
             "lsob":   _score_lsob(klines_5m),
             "scalp":  _score_scalp(klines_5m),
             "trend":  _score_trend(df5m, df15m),

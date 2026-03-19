@@ -291,8 +291,10 @@ def agent_scanner_loop(
             klines_map: dict[str, dict] = {}
             for sym in candidates:
                 klines_map[sym] = {
+                    "1m":  client.get_klines(sym, "1m",  limit=30),   # scalp 1m confirmation
                     "5m":  client.get_klines(sym, "5m",  limit=120),
                     "15m": client.get_klines(sym, "15m", limit=120),
+                    "1h":  client.get_klines(sym, "1h",  limit=config.SNIPER_1H_LIMIT),  # sniper swing
                 }
 
             # ---- 5. Score all (symbol × strategy) combinations ----
@@ -327,17 +329,20 @@ def agent_scanner_loop(
             )
 
             trader = traders[best.symbol]
+            klines_1m  = klines_map[best.symbol]["1m"]
             klines_5m  = klines_map[best.symbol]["5m"]
             klines_15m = klines_map[best.symbol]["15m"]
+            klines_1h  = klines_map[best.symbol]["1h"]
 
             if best.strategy == "sniper":
                 trader.rm = risk_managers["sniper"]
-                # Reuse already-fetched 15m klines — same data scorer used, no extra API call.
-                # lookback=50 matches strategy_scanner so Fib levels are identical.
+                # Use 1H klines for swing detection (more significant Fib levels),
+                # 15m for EMA trend filter, 5m for live price.
                 sniper = check_sniper_signal(
-                    klines_5m=klines_15m,
-                    lookback=50,
+                    klines_5m=klines_5m,
+                    lookback=config.FIB_LOOKBACK,
                     klines_15m=klines_15m,
+                    klines_1h=klines_1h,
                 )
                 if sniper:
                     trader.open_sniper_position(sniper)
@@ -369,6 +374,7 @@ def agent_scanner_loop(
                 trader.rm = risk_managers["scalp"]
                 scalp = check_scalp_signal(
                     klines_5m=klines_5m,
+                    klines_1m=klines_1m,   # 1m momentum confirmation
                     bb_period=config.SCALP_BB_PERIOD,
                     bb_std=config.SCALP_BB_STD,
                     rsi_period=config.SCALP_RSI_PERIOD,

@@ -47,6 +47,7 @@ class ScalpSignal:
 
 def check_scalp_signal(
     klines_5m: list[dict],
+    klines_1m: list[dict] | None = None,
     bb_period: int = 20,
     bb_std: float = 2.0,
     rsi_period: int = 7,
@@ -54,7 +55,11 @@ def check_scalp_signal(
 ) -> Optional[ScalpSignal]:
     """
     Analyses 5m candle data and returns a scalp signal, or None.
-    No 15m trend filter - works in both range and trending markets.
+
+    If klines_1m is provided, a 1m momentum filter is applied:
+    the 1m RSI(7) must be oversold and turning up (long) or overbought
+    and turning down (short). This tightens entry timing significantly,
+    filtering out 5m signals where the 1m chart is still moving against us.
     """
     df = klines_to_df(klines_5m)
     df = add_scalp_indicators(df, bb_period=bb_period, bb_std=bb_std,
@@ -82,36 +87,55 @@ def check_scalp_signal(
     if vol_ratio < VOL_RATIO_MIN:
         return None
 
+    direction = None
+
     # --- Long: Oversold Bounce ---
     if (
         bb_pct < OVERSOLD_PCT
         and rsi_val < RSI_OVERSOLD
         and rsi_val > rsi_prev   # RSI turning up
     ):
-        return ScalpSignal(
-            direction="long",
-            price=price,
-            rsi_7=rsi_val,
-            bb_pct=bb_pct,
-            vol_ratio=vol_ratio,
-            bb_upper=float(prev["bb_upper"]),
-            bb_lower=float(prev["bb_lower"]),
-        )
+        direction = "long"
 
     # --- Short: Overbought Rejection ---
-    if (
+    elif (
         bb_pct > OVERBOUGHT_PCT
         and rsi_val > RSI_OVERBOUGHT
         and rsi_val < rsi_prev   # RSI turning down
     ):
-        return ScalpSignal(
-            direction="short",
-            price=price,
-            rsi_7=rsi_val,
-            bb_pct=bb_pct,
-            vol_ratio=vol_ratio,
-            bb_upper=float(prev["bb_upper"]),
-            bb_lower=float(prev["bb_lower"]),
-        )
+        direction = "short"
 
-    return None
+    if not direction:
+        return None
+
+    # ── 1m momentum confirmation (optional) ──────────────────────────────────
+    # The 1m RSI(7) must also show momentum in the trade direction.
+    # This filters out 5m signals where the 1m chart is still trending against us.
+    if klines_1m:
+        try:
+            df1m = klines_to_df(klines_1m)
+            df1m = add_scalp_indicators(df1m, bb_period=10, bb_std=2.0,
+                                         rsi_period=7, vol_period=10)
+            if len(df1m) >= 12:
+                rsi_1m      = float(df1m.iloc[-2]["rsi_scalp"])
+                rsi_1m_prev = float(df1m.iloc[-3]["rsi_scalp"])
+                if direction == "long":
+                    # 1m must be oversold (<50) AND turning up — entry momentum aligned
+                    if rsi_1m >= 50 or rsi_1m <= rsi_1m_prev:
+                        return None
+                else:
+                    # 1m must be overbought (>50) AND turning down
+                    if rsi_1m <= 50 or rsi_1m >= rsi_1m_prev:
+                        return None
+        except Exception:
+            pass  # if 1m data unavailable, don't block signal
+
+    return ScalpSignal(
+        direction=direction,
+        price=price,
+        rsi_7=rsi_val,
+        bb_pct=bb_pct,
+        vol_ratio=vol_ratio,
+        bb_upper=float(prev["bb_upper"]),
+        bb_lower=float(prev["bb_lower"]),
+    )

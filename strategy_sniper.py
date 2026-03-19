@@ -61,16 +61,24 @@ def check_sniper_signal(
     klines_5m: list[dict],
     lookback: int = 50,
     klines_15m: list[dict] | None = None,
+    klines_1h: list[dict] | None = None,
 ) -> SniperSignal | None:
     """
-    Scans 5m candle data for a Fibonacci 0.882 SNIPER entry.
+    Scans candle data for a Fibonacci 0.882 SNIPER entry.
     Returns a SniperSignal or None.
 
-    If klines_15m is provided, applies EMA50 trend filter:
-      - LONG only when price > EMA50 (uptrend context)
-      - SHORT only when price < EMA50 (downtrend context)
+    klines_1h (recommended): when provided, uses the 1H chart for swing
+      high/low detection. This produces more significant Fibonacci levels
+      that are respected by more market participants.
+      The 15m EMA50 trend filter is still applied separately.
+
+    klines_15m: EMA50 trend filter only (LONG above EMA50, SHORT below).
     """
-    df = klines_to_df(klines_5m)
+    # Prefer 1H klines for swing detection — more significant levels.
+    # Fall back to whatever klines_5m contains (usually 15m in agent mode).
+    swing_klines = klines_1h if (klines_1h and len(klines_1h) >= lookback) else klines_5m
+
+    df = klines_to_df(swing_klines)
     df = add_fib_indicators(df, lookback=lookback)
 
     if len(df) < lookback + 2:
@@ -83,7 +91,9 @@ def check_sniper_signal(
         if prev[col] != prev[col]:
             return None
 
-    price      = float(df.iloc[-1]["close"])
+    # Use the most recent 5m close as current price (tighter than 1H last close)
+    price_src = klines_to_df(klines_5m) if klines_1h else df
+    price     = float(price_src.iloc[-1]["close"])
     swing_high = float(prev["swing_high"])
     swing_low  = float(prev["swing_low"])
     rng        = swing_high - swing_low
