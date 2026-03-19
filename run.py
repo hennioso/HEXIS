@@ -52,6 +52,22 @@ dashboard_thread = threading.Thread(
 dashboard_thread.start()
 
 
+# ── Crypto payment watcher (optional — only active if CRYPTO_WALLET_ADDRESS set) ─
+import threading as _threading
+import config as _config
+
+if _config.CRYPTO_WALLET_ADDRESS:
+    import crypto_watcher
+    _crypto_stop = _threading.Event()
+    _crypto_thread = _threading.Thread(
+        target=crypto_watcher.watcher_loop,
+        args=(_crypto_stop,),
+        name="CryptoWatcher",
+        daemon=True,
+    )
+    _crypto_thread.start()
+
+
 # ── Trading bot (runs in the main thread — blocks until CTRL+C) ──────────────
 from main import main   # noqa: E402
 main()

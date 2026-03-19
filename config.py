@@ -97,13 +97,17 @@ SMTP_USER     = os.getenv("SMTP_USER",     "")          # sender address
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")          # app password
 SMTP_FROM     = os.getenv("SMTP_FROM",     SMTP_USER)   # display sender
 
-# ---- Stripe Payments -------------------------------------------------------
-# Optional – leave empty to disable the payment/checkout flow.
-STRIPE_SECRET_KEY      = os.getenv("STRIPE_SECRET_KEY",      "")
-STRIPE_PUBLISHABLE_KEY = os.getenv("STRIPE_PUBLISHABLE_KEY", "")
-STRIPE_WEBHOOK_SECRET  = os.getenv("STRIPE_WEBHOOK_SECRET",  "")
-STRIPE_PRICE_ID        = os.getenv("STRIPE_PRICE_ID",        "")   # Stripe Price ID for HEXIS access
-HEXIS_BASE_URL         = os.getenv("HEXIS_BASE_URL",         "http://localhost:5000")
+# ---- Crypto Payments -------------------------------------------------------
+# TRC20 wallet address (Tron network) — USDT and USDC are both accepted.
+# Leave empty to disable the payment/checkout flow.
+CRYPTO_WALLET_ADDRESS = os.getenv("CRYPTO_WALLET_ADDRESS", "")
+# Minimum qualifying payment in USDT (inclusive). Payments below this are ignored.
+CRYPTO_MIN_USDT       = float(os.getenv("CRYPTO_MIN_USDT",   "48.0"))
+# Base price shown on the checkout page. Each buyer gets a unique micro-amount
+# (e.g. 49.07) so payments can be matched without a memo/tag.
+CRYPTO_PRICE_USDT     = float(os.getenv("CRYPTO_PRICE_USDT", "49.0"))
+# Optional TronGrid Pro API key — increases rate limits.
+TRONGRID_API_KEY      = os.getenv("TRONGRID_API_KEY", "")
 
 # ---- Circuit Breakers ------------------------------------------------------
 # Pause ALL trading when today's realized PnL drops below this value (UTC day).

@@ -9,12 +9,12 @@
     :root {
       --bg: #0d1117; --card: #161b22; --border: #30363d;
       --text: #e6edf3; --muted: #8b949e; --green: #3fb950;
-      --red: #f85149; --accent: #58a6ff;
+      --red: #f85149; --accent: #58a6ff; --yellow: #d29922;
     }
     body { background: var(--bg); color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-    .wrap { width: 100%; max-width: 440px; padding: 20px; }
+    .wrap { width: 100%; max-width: 460px; padding: 20px; }
     .logo { text-align: center; margin-bottom: 32px; }
     .logo h1 { font-size: 26px; font-weight: 700; letter-spacing: .06em; }
     .logo p  { color: var(--muted); font-size: 13px; margin-top: 6px; }
@@ -42,12 +42,49 @@
       cursor: pointer; transition: opacity .15s; }
     .btn:hover { opacity: .85; }
     .btn:disabled { opacity: .5; cursor: not-allowed; }
+    /* Payment steps */
+    #step-email  { }
+    #step-pay    { display: none; }
+    #step-done   { display: none; }
+    .payment-box { background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+    .payment-box .label { font-size: 11px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
+    .amount-row { display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px; }
+    .amount-val { font-size: 22px; font-weight: 700; color: var(--green); }
+    .token-badge { font-size: 12px; font-weight: 600; background: rgba(63,185,80,.15);
+      color: var(--green); padding: 3px 8px; border-radius: 4px; }
+    .network-badge { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .wallet-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+    .wallet-addr { font-size: 12px; font-family: monospace; color: var(--accent);
+      word-break: break-all; flex: 1; }
+    .copy-btn { flex-shrink: 0; padding: 6px 10px; background: var(--card);
+      border: 1px solid var(--border); border-radius: 6px; color: var(--muted);
+      font-size: 12px; cursor: pointer; transition: color .15s; }
+    .copy-btn:hover { color: var(--text); }
+    #qr-canvas { display: block; margin: 16px auto 0; border-radius: 8px;
+      background: white; padding: 8px; }
+    .warning-box { background: rgba(210,153,34,.1); border: 1px solid rgba(210,153,34,.3);
+      border-radius: 8px; padding: 12px 14px; font-size: 12px; color: var(--yellow);
+      margin-bottom: 16px; line-height: 1.5; }
     .info-box { background: rgba(88,166,255,.07); border: 1px solid rgba(88,166,255,.25);
       border-radius: 8px; padding: 12px 14px; font-size: 13px; color: var(--muted);
       margin-bottom: 20px; line-height: 1.5; }
     .error-box { background: rgba(248,81,73,.1); border: 1px solid rgba(248,81,73,.3);
       border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--red);
       margin-bottom: 16px; display: none; }
+    .status-row { display: flex; align-items: center; gap: 8px; font-size: 13px;
+      color: var(--muted); margin-top: 12px; }
+    .spinner { width: 14px; height: 14px; border: 2px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin .7s linear infinite; flex-shrink: 0; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .done-icon { font-size: 48px; text-align: center; margin-bottom: 16px; }
+    .done-code { font-size: 22px; font-weight: 700; font-family: monospace;
+      color: var(--green); text-align: center; letter-spacing: .12em;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 14px; margin: 16px 0; }
     .footer { text-align: center; margin-top: 24px; font-size: 12px; color: var(--muted); }
     .footer a { color: var(--accent); text-decoration: none; }
     .disclaimer { font-size: 11px; color: var(--muted); margin-top: 20px;
@@ -68,15 +105,13 @@
 
     <div class="card">
       <h2>Get Access</h2>
-      <p class="sub">One-time payment — lifetime access to your personal HEXIS trading bot.</p>
+      <p class="sub">One-time crypto payment — lifetime access to your personal HEXIS trading bot.</p>
 
       <div class="price-box">
-        <div>
-          <div class="price-label">One-time fee</div>
-        </div>
+        <div><div class="price-label">One-time fee</div></div>
         <div style="text-align:right">
-          <div class="price-amount">€49</div>
-          <div class="price-note">incl. VAT · one-time</div>
+          <div class="price-amount">~${{ price }} USDT</div>
+          <div class="price-note">TRC20 (Tron) · one-time</div>
         </div>
       </div>
 
@@ -88,18 +123,61 @@
         <div class="feat"><span class="feat-icon">✓</span> Invite code emailed instantly after payment</div>
       </div>
 
-      {% if stripe_enabled %}
-      <div id="error-box" class="error-box"></div>
-      <div class="field">
-        <label>Email for invite code</label>
-        <input type="email" id="email-input" placeholder="you@example.com" autocomplete="email" />
+      {% if crypto_enabled %}
+
+      <!-- Step 1: enter email -->
+      <div id="step-email">
+        <div id="error-box" class="error-box"></div>
+        <div class="field">
+          <label>Email for invite code</label>
+          <input type="email" id="email-input" placeholder="you@example.com" autocomplete="email" />
+        </div>
+        <button class="btn" onclick="generateAddress()">Generate Payment Address →</button>
       </div>
-      <button class="btn" id="checkout-btn" onclick="startCheckout()">
-        Pay with Card →
-      </button>
+
+      <!-- Step 2: send payment -->
+      <div id="step-pay">
+        <div class="warning-box">
+          ⚠ Send <strong>exactly</strong> the amount shown below. Payments with a different amount cannot be matched automatically.
+        </div>
+        <div class="payment-box">
+          <div class="label">Send exactly</div>
+          <div class="amount-row">
+            <span class="amount-val" id="pay-amount">—</span>
+            <span class="token-badge">USDT</span>
+          </div>
+          <div class="network-badge">Network: TRC20 (Tron)</div>
+          <div class="label" style="margin-top:14px">To this wallet</div>
+          <div class="wallet-row">
+            <span class="wallet-addr" id="pay-wallet">—</span>
+            <button class="copy-btn" onclick="copyWallet()">Copy</button>
+          </div>
+          <canvas id="qr-canvas" width="160" height="160"></canvas>
+        </div>
+        <div class="status-row">
+          <div class="spinner"></div>
+          <span id="status-text">Waiting for payment confirmation… (checks every 15s)</span>
+        </div>
+      </div>
+
+      <!-- Step 3: payment confirmed -->
+      <div id="step-done">
+        <div class="done-icon">✅</div>
+        <p style="text-align:center;font-size:14px;color:var(--muted);margin-bottom:8px">
+          Payment confirmed! Your invite code:
+        </p>
+        <div class="done-code" id="done-code">—</div>
+        <p style="text-align:center;font-size:13px;color:var(--muted);margin-bottom:20px">
+          A copy was also sent to your email. Use it on the register page.
+        </p>
+        <a href="/register" class="btn" style="display:block;text-align:center;text-decoration:none">
+          Register now →
+        </a>
+      </div>
+
       {% else %}
       <div class="info-box">
-        Payment is not yet configured. Please contact the administrator to receive an invite code.
+        Payments are not yet configured. Please contact the administrator to receive an invite code.
       </div>
       {% endif %}
 
@@ -117,25 +195,90 @@
     </div>
   </div>
 
+  <!-- Minimal QR code generator (no CDN dependency) -->
   <script>
-  async function startCheckout() {
-    const btn   = document.getElementById('checkout-btn');
-    const email = document.getElementById('email-input').value.trim();
-    const errBox = document.getElementById('error-box');
-    errBox.style.display = 'none';
-    if (!email) { errBox.textContent = 'Please enter your email address.'; errBox.style.display = 'block'; return; }
+  // Tiny QR placeholder using a data URL canvas approach — uses Google Charts API
+  // for a self-contained, dependency-free QR that works offline too if needed.
+  function drawQR(text) {
+    const canvas = document.getElementById('qr-canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    img.onload = () => ctx.drawImage(img, 0, 0, 160, 160);
+    img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=' + encodeURIComponent(text);
+  }
+
+  let _email = '';
+  let _wallet = '';
+  let _pollTimer = null;
+
+  function showError(msg) {
+    const b = document.getElementById('error-box');
+    b.textContent = msg;
+    b.style.display = 'block';
+  }
+
+  async function generateAddress() {
+    const emailInput = document.getElementById('email-input');
+    _email = emailInput.value.trim();
+    document.getElementById('error-box').style.display = 'none';
+    if (!_email || !_email.includes('@')) {
+      showError('Please enter a valid email address.');
+      return;
+    }
+
+    const btn = document.querySelector('#step-email .btn');
     btn.disabled = true;
-    btn.textContent = 'Redirecting…';
+    btn.textContent = 'Generating…';
+
     try {
-      const r = await fetch('/api/create_checkout_session', {
+      const r = await fetch('/api/create_payment', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({email})
+        body: JSON.stringify({email: _email})
       });
       const d = await r.json();
-      if (d.url) { window.location.href = d.url; }
-      else { errBox.textContent = d.error || 'Checkout failed.'; errBox.style.display = 'block'; btn.disabled = false; btn.textContent = 'Pay with Card →'; }
-    } catch(e) { errBox.textContent = 'Network error. Please try again.'; errBox.style.display = 'block'; btn.disabled = false; btn.textContent = 'Pay with Card →'; }
+      if (d.error) { showError(d.error); btn.disabled = false; btn.textContent = 'Generate Payment Address →'; return; }
+
+      _wallet = d.wallet;
+      document.getElementById('pay-amount').textContent = d.amount.toFixed(2);
+      document.getElementById('pay-wallet').textContent = _wallet;
+      drawQR(_wallet);
+
+      document.getElementById('step-email').style.display = 'none';
+      document.getElementById('step-pay').style.display = 'block';
+      startPolling();
+    } catch(e) {
+      showError('Network error. Please try again.');
+      btn.disabled = false;
+      btn.textContent = 'Generate Payment Address →';
+    }
+  }
+
+  function copyWallet() {
+    navigator.clipboard.writeText(_wallet).then(() => {
+      const b = document.querySelector('.copy-btn');
+      b.textContent = 'Copied!';
+      setTimeout(() => b.textContent = 'Copy', 2000);
+    });
+  }
+
+  function startPolling() {
+    _pollTimer = setInterval(pollStatus, 15000);
+  }
+
+  async function pollStatus() {
+    try {
+      const r = await fetch('/api/payment_status?email=' + encodeURIComponent(_email));
+      const d = await r.json();
+      if (d.status === 'confirmed') {
+        clearInterval(_pollTimer);
+        document.getElementById('step-pay').style.display = 'none';
+        document.getElementById('step-done').style.display = 'block';
+        document.getElementById('done-code').textContent = d.code;
+      } else if (d.status === 'pending') {
+        document.getElementById('status-text').textContent = 'Waiting for payment confirmation… (checks every 15s)';
+      }
+    } catch(e) { /* silent — will retry */ }
   }
   </script>
 </body>

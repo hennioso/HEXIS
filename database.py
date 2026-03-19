@@ -117,6 +117,33 @@ def init_db():
         # Migration: per-user position sizing control
         _add_column_if_missing(conn, "users", "margin_pct", "REAL DEFAULT 0.075")
 
+        # ── Pending crypto payments (awaiting on-chain confirmation) ─────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pending_payments (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                email           TEXT NOT NULL,
+                expected_amount REAL NOT NULL,  -- unique micro-amount shown to buyer
+                created_at      TEXT NOT NULL,
+                expires_at      TEXT NOT NULL   -- auto-expire after 24h
+            )
+        """)
+        conn.commit()
+
+        # ── Confirmed crypto payments (audit log) ────────────────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS crypto_payments (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                txid         TEXT UNIQUE NOT NULL,
+                from_address TEXT,
+                amount_usdt  REAL NOT NULL,
+                token        TEXT NOT NULL,   -- 'USDT' or 'USDC'
+                email        TEXT,            -- NULL if unmatched
+                invite_code  TEXT,            -- NULL if unmatched
+                confirmed_at TEXT NOT NULL
+            )
+        """)
+        conn.commit()
+
 
 def _add_column_if_missing(conn, table: str, column: str, col_type: str):
     """Safely adds a column to an existing table (no-op if already present)."""
@@ -662,5 +689,100 @@ def get_all_invite_codes() -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
             "SELECT * FROM invite_codes ORDER BY created_at DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+# ── Crypto payment management ─────────────────────────────────────────────────
+
+def create_pending_payment(email: str, expected_amount: float, expires_hours: int = 24) -> int:
+    """Store a pending crypto payment request with a unique expected amount."""
+    from datetime import timedelta
+    expires = (datetime.utcnow() + timedelta(hours=expires_hours)).isoformat()
+    with _connect() as conn:
+        cur = conn.execute(
+            "INSERT INTO pending_payments (email, expected_amount, created_at, expires_at) VALUES (?,?,?,?)",
+            (email.lower().strip(), expected_amount, datetime.utcnow().isoformat(), expires),
+        )
+        conn.commit()
+        return cur.lastrowid
+
+
+def get_pending_payment_by_email(email: str) -> Optional[dict]:
+    """Return the active pending payment for an email, or None if expired/missing."""
+    with _connect() as conn:
+        row = conn.execute(
+            """SELECT * FROM pending_payments
+               WHERE email = ? AND expires_at > ?
+               ORDER BY created_at DESC LIMIT 1""",
+            (email.lower().strip(), datetime.utcnow().isoformat()),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def is_amount_pending(amount: float) -> bool:
+    """Check whether another pending payment already uses this exact amount."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM pending_payments WHERE expected_amount = ? AND expires_at > ?",
+            (amount, datetime.utcnow().isoformat()),
+        ).fetchone()
+        return row is not None
+
+
+def match_pending_payment(amount: float, tolerance: float = 0.02) -> Optional[dict]:
+    """Find the oldest pending payment whose expected_amount is within tolerance of amount."""
+    with _connect() as conn:
+        row = conn.execute(
+            """SELECT * FROM pending_payments
+               WHERE ABS(expected_amount - ?) <= ? AND expires_at > ?
+               ORDER BY created_at ASC LIMIT 1""",
+            (amount, tolerance, datetime.utcnow().isoformat()),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def delete_pending_payment(payment_id: int):
+    with _connect() as conn:
+        conn.execute("DELETE FROM pending_payments WHERE id = ?", (payment_id,))
+        conn.commit()
+
+
+def is_crypto_payment_processed(txid: str) -> bool:
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT 1 FROM crypto_payments WHERE txid = ?", (txid,)
+        ).fetchone() is not None
+
+
+def record_crypto_payment(txid: str, from_address: str, amount: float,
+                           token: str, email: Optional[str], invite_code: Optional[str]):
+    with _connect() as conn:
+        conn.execute(
+            """INSERT OR IGNORE INTO crypto_payments
+               (txid, from_address, amount_usdt, token, email, invite_code, confirmed_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (txid, from_address, amount, token, email, invite_code,
+             datetime.utcnow().isoformat()),
+        )
+        conn.commit()
+
+
+def get_confirmed_payment_by_email(email: str) -> Optional[dict]:
+    """Return the most recent confirmed payment for an email that has an invite code."""
+    with _connect() as conn:
+        row = conn.execute(
+            """SELECT * FROM crypto_payments
+               WHERE email = ? AND invite_code IS NOT NULL
+               ORDER BY confirmed_at DESC LIMIT 1""",
+            (email.lower().strip(),),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_all_crypto_payments() -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM crypto_payments ORDER BY confirmed_at DESC"
         ).fetchall()
         return [dict(r) for r in rows]

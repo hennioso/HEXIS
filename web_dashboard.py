@@ -20,18 +20,13 @@ import mailer
 from exchange import BitunixClient
 from indicators import klines_to_df, add_indicators
 
-try:
-    import stripe as _stripe
-    _stripe.api_key = config.STRIPE_SECRET_KEY
-    _STRIPE_ENABLED = bool(config.STRIPE_SECRET_KEY and config.STRIPE_PRICE_ID)
-except ImportError:
-    _STRIPE_ENABLED = False
+import random
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY") or secrets.token_hex(32)
 
 # ── Auth (DB-based) ──────────────────────────────────────────────────────────
-_PUBLIC_ROUTES = {"login", "register", "checkout", "create_checkout_session", "stripe_webhook", "static"}
+_PUBLIC_ROUTES = {"login", "register", "checkout", "create_payment", "payment_status", "static"}
 
 @app.before_request
 def check_auth():
@@ -143,68 +138,72 @@ def api_admin_invite():
     return jsonify({"ok": True, "code": code, "email": email, "email_sent": sent})
 
 
-# ── Stripe payment gateway ────────────────────────────────────────────────────
+# ── Crypto payment gateway ────────────────────────────────────────────────────
 
 @app.route("/checkout")
 def checkout():
-    """Render the payment page (Stripe Checkout)."""
     return render_template(
         "checkout.html",
-        stripe_publishable_key=config.STRIPE_PUBLISHABLE_KEY,
-        stripe_enabled=_STRIPE_ENABLED,
+        crypto_enabled=bool(config.CRYPTO_WALLET_ADDRESS),
+        price=config.CRYPTO_PRICE_USDT,
     )
 
 
-@app.route("/api/create_checkout_session", methods=["POST"])
-def create_checkout_session():
-    """Create a Stripe Checkout session and return the URL."""
-    if not _STRIPE_ENABLED:
-        return jsonify({"error": "Payments not configured"}), 503
+@app.route("/api/create_payment", methods=["POST"])
+def create_payment():
+    """Generate a unique payment amount for the buyer and store the pending request."""
+    if not config.CRYPTO_WALLET_ADDRESS:
+        return jsonify({"error": "Crypto payments not configured."}), 503
+
     data  = request.get_json(force=True) or {}
-    email = data.get("email", "").strip() or None
-    try:
-        session_obj = _stripe.checkout.Session.create(
-            payment_method_types=["card"],
-            line_items=[{"price": config.STRIPE_PRICE_ID, "quantity": 1}],
-            mode="payment",
-            customer_email=email,
-            success_url=config.HEXIS_BASE_URL + "/register?paid=1",
-            cancel_url=config.HEXIS_BASE_URL + "/checkout?cancelled=1",
-            metadata={"email": email or ""},
-        )
-        return jsonify({"url": session_obj.url})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    email = data.get("email", "").strip().lower()
+    if not email or "@" not in email:
+        return jsonify({"error": "Valid email address required."}), 400
+
+    # Reuse an existing pending request for this email if still valid
+    existing = db.get_pending_payment_by_email(email)
+    if existing:
+        return jsonify({
+            "wallet":  config.CRYPTO_WALLET_ADDRESS,
+            "amount":  existing["expected_amount"],
+            "token":   "USDT",
+            "network": "TRC20 (Tron)",
+        })
+
+    # Generate a unique micro-amount so the payment can be matched without a memo
+    base = config.CRYPTO_PRICE_USDT
+    amount = base
+    for _ in range(30):
+        candidate = round(base + random.randint(1, 97) / 100, 2)
+        if not db.is_amount_pending(candidate):
+            amount = candidate
+            break
+    db.create_pending_payment(email, amount)
+
+    return jsonify({
+        "wallet":  config.CRYPTO_WALLET_ADDRESS,
+        "amount":  amount,
+        "token":   "USDT",
+        "network": "TRC20 (Tron)",
+    })
 
 
-@app.route("/webhook/stripe", methods=["POST"])
-def stripe_webhook():
-    """Stripe sends payment events here. On success: generate + email invite code."""
-    if not _STRIPE_ENABLED:
-        return "", 200
+@app.route("/api/payment_status")
+def payment_status():
+    """Poll endpoint — returns confirmed / pending / not_found."""
+    email = request.args.get("email", "").strip().lower()
+    if not email:
+        return jsonify({"status": "error"}), 400
 
-    payload    = request.get_data()
-    sig_header = request.headers.get("Stripe-Signature", "")
-    try:
-        event = _stripe.Webhook.construct_event(
-            payload, sig_header, config.STRIPE_WEBHOOK_SECRET
-        )
-    except Exception as e:
-        logging.getLogger("stripe").warning(f"Webhook signature failed: {e}")
-        return jsonify({"error": "invalid signature"}), 400
+    confirmed = db.get_confirmed_payment_by_email(email)
+    if confirmed:
+        return jsonify({"status": "confirmed", "code": confirmed["invite_code"]})
 
-    if event["type"] == "checkout.session.completed":
-        sess  = event["data"]["object"]
-        email = sess.get("customer_email") or sess.get("metadata", {}).get("email") or ""
-        code  = _generate_invite_code()
-        db.create_invite_code(code, email or None)
-        if email:
-            mailer.send_invite_code(email, code)
-        logging.getLogger("stripe").info(
-            f"Payment confirmed for {email or 'unknown'} — invite code: {code}"
-        )
+    pending = db.get_pending_payment_by_email(email)
+    if pending:
+        return jsonify({"status": "pending"})
 
-    return "", 200
+    return jsonify({"status": "not_found"})
 
 
 @app.route("/logout")
