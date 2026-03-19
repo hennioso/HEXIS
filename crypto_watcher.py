@@ -1,8 +1,14 @@
 """
 HEXIS — Crypto Payment Watcher
 
-Monitors a TRC20 wallet for incoming USDT / USDC payments.
-Polls the TronGrid public API every 60 seconds (no API key required).
+Monitors wallets on multiple chains for incoming USDT / USDC payments.
+Supported networks (enable each by setting the wallet address in .env):
+
+  TRC20  (Tron)     — CRYPTO_WALLET_TRX  — free TronGrid API, no key needed
+  BASE              — CRYPTO_WALLET_EVM  — Basescan API key (free)
+  Solana            — CRYPTO_WALLET_SOL  — Helius API key (free tier)
+  ERC20  (Ethereum) — CRYPTO_WALLET_EVM  — Etherscan API key (free)
+                       (same EVM address for ETH mainnet + BASE)
 
 When a qualifying payment arrives (>= CRYPTO_MIN_USDT) and matches a
 pending payment request, it:
@@ -14,7 +20,6 @@ pending payment request, it:
 import logging
 import secrets
 import string
-import time
 
 import requests
 
@@ -24,100 +29,264 @@ import mailer
 
 log = logging.getLogger("CryptoWatcher")
 
-# TRC20 contract addresses on Tron mainnet
-_CONTRACTS = {
+
+# ── Contract addresses ────────────────────────────────────────────────────────
+
+# TRC20 (Tron mainnet)
+_TRX_CONTRACTS = {
     "USDT": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
     "USDC": "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8",
 }
 
-_TRONGRID = "https://api.trongrid.io"
+# EVM — Ethereum mainnet
+_ETH_CONTRACTS = {
+    "USDT": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+    "USDC": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+}
+
+# EVM — BASE mainnet
+_BASE_CONTRACTS = {
+    "USDC": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",  # native USDC on Base
+    "USDT": "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",  # bridged USDT on Base
+}
+
+# Solana SPL
+_SOL_MINTS = {
+    "USDT": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+    "USDC": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+}
 
 
-def _fetch_trc20(wallet: str, contract: str) -> list[dict]:
-    """Fetch the 50 most recent incoming TRC20 token transfers for wallet."""
-    url = f"{_TRONGRID}/v1/accounts/{wallet}/transactions/trc20"
-    params = {"limit": 50, "contract_address": contract, "only_to": "true"}
+# ── Chain fetchers ────────────────────────────────────────────────────────────
+
+def _fetch_trc20(wallet: str) -> list[dict]:
+    """Return normalised incoming transfers on Tron (USDT + USDC)."""
+    result = []
     headers = {}
     if config.TRONGRID_API_KEY:
         headers["TRON-PRO-API-KEY"] = config.TRONGRID_API_KEY
-    try:
-        r = requests.get(url, params=params, headers=headers, timeout=15)
-        r.raise_for_status()
-        return r.json().get("data", [])
-    except Exception as exc:
-        log.warning(f"TronGrid request failed: {exc}")
+    for token, contract in _TRX_CONTRACTS.items():
+        try:
+            r = requests.get(
+                f"https://api.trongrid.io/v1/accounts/{wallet}/transactions/trc20",
+                params={"limit": 50, "contract_address": contract, "only_to": "true"},
+                headers=headers, timeout=15,
+            )
+            r.raise_for_status()
+            for tx in r.json().get("data", []):
+                if tx.get("to", "").lower() != wallet.lower():
+                    continue
+                result.append({
+                    "txid":   tx["transaction_id"],
+                    "amount": int(tx.get("value", 0)) / 1_000_000,
+                    "token":  token,
+                    "from":   tx.get("from", ""),
+                    "chain":  "TRC20",
+                })
+        except Exception as exc:
+            log.warning(f"TronGrid ({token}) error: {exc}")
+    return result
+
+
+def _fetch_evm(wallet: str, chain: str) -> list[dict]:
+    """Return normalised incoming ERC-20 transfers on Ethereum or BASE."""
+    if chain == "BASE":
+        base_url = "https://api.basescan.org/api"
+        api_key  = config.BASESCAN_API_KEY
+        contracts = _BASE_CONTRACTS
+        decimals  = {"USDT": 6, "USDC": 6}
+    else:  # ETH
+        base_url = "https://api.etherscan.io/api"
+        api_key  = config.ETHERSCAN_API_KEY
+        contracts = _ETH_CONTRACTS
+        decimals  = {"USDT": 6, "USDC": 6}
+
+    if not api_key:
         return []
 
+    result = []
+    for token, contract in contracts.items():
+        try:
+            r = requests.get(base_url, params={
+                "module":          "account",
+                "action":          "tokentx",
+                "address":         wallet,
+                "contractaddress": contract,
+                "sort":            "desc",
+                "apikey":          api_key,
+            }, timeout=15)
+            r.raise_for_status()
+            data = r.json()
+            if data.get("status") != "1":
+                continue
+            for tx in data.get("result", []):
+                if tx.get("to", "").lower() != wallet.lower():
+                    continue
+                dec = int(tx.get("tokenDecimal", decimals.get(token, 6)))
+                result.append({
+                    "txid":   tx["hash"],
+                    "amount": int(tx["value"]) / (10 ** dec),
+                    "token":  token,
+                    "from":   tx.get("from", ""),
+                    "chain":  chain,
+                })
+        except Exception as exc:
+            log.warning(f"{chain} ({token}) error: {exc}")
+    return result
+
+
+def _fetch_solana(wallet: str) -> list[dict]:
+    """Return normalised incoming SPL-token transfers on Solana via Helius API."""
+    if not config.HELIUS_API_KEY:
+        return []
+    result = []
+    try:
+        r = requests.get(
+            f"https://api.helius.xyz/v0/addresses/{wallet}/transactions",
+            params={"api-key": config.HELIUS_API_KEY, "type": "TRANSFER", "limit": 50},
+            timeout=15,
+        )
+        r.raise_for_status()
+        for tx in r.json():
+            for transfer in tx.get("tokenTransfers", []):
+                if transfer.get("toUserAccount", "").lower() != wallet.lower():
+                    continue
+                mint = transfer.get("mint", "")
+                token = None
+                for name, m in _SOL_MINTS.items():
+                    if m == mint:
+                        token = name
+                        break
+                if not token:
+                    continue
+                result.append({
+                    "txid":   tx["signature"],
+                    "amount": float(transfer.get("tokenAmount", 0)),
+                    "token":  token,
+                    "from":   transfer.get("fromUserAccount", ""),
+                    "chain":  "Solana",
+                })
+    except Exception as exc:
+        log.warning(f"Helius (Solana) error: {exc}")
+    return result
+
+
+# ── Core logic ────────────────────────────────────────────────────────────────
 
 def _new_invite_code() -> str:
     alphabet = string.ascii_uppercase + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(10))
 
 
-def check_payments() -> None:
-    wallet = config.CRYPTO_WALLET_ADDRESS
-    if not wallet:
+def _process_transfer(tx: dict) -> None:
+    """Match one transfer against pending payments and handle accordingly."""
+    txid   = tx["txid"]
+    amount = tx["amount"]
+    token  = tx["token"]
+    chain  = tx["chain"]
+
+    if db.is_crypto_payment_processed(txid):
+        return
+    if amount < config.CRYPTO_MIN_USDT:
+        log.debug(f"Skipping small payment: {amount:.2f} {token} on {chain} txid={txid[:16]}…")
         return
 
-    for token, contract in _CONTRACTS.items():
-        transfers = _fetch_trc20(wallet, contract)
-        for tx in transfers:
-            txid = tx.get("transaction_id")
-            if not txid or db.is_crypto_payment_processed(txid):
-                continue
+    pending = db.match_pending_payment(amount)
+    if pending:
+        code = _new_invite_code()
+        db.create_invite_code(code, pending["email"])
+        db.record_crypto_payment(
+            txid=txid,
+            from_address=tx["from"],
+            amount=amount,
+            token=f"{token} ({chain})",
+            email=pending["email"],
+            invite_code=code,
+        )
+        db.delete_pending_payment(pending["id"])
+        mailer.send_invite_code(pending["email"], code)
+        log.info(
+            f"Payment matched: {amount:.2f} {token} on {chain} txid={txid[:16]}… "
+            f"→ invite code sent to {pending['email']}"
+        )
+    else:
+        db.record_crypto_payment(
+            txid=txid,
+            from_address=tx["from"],
+            amount=amount,
+            token=f"{token} ({chain})",
+            email=None,
+            invite_code=None,
+        )
+        log.warning(
+            f"Unmatched payment: {amount:.2f} {token} on {chain} txid={txid[:16]}… "
+            f"— no pending payment request found (manual review needed)"
+        )
 
-            # USDT / USDC use 6 decimal places on Tron
-            amount = int(tx.get("value", 0)) / 1_000_000
-            to_addr = tx.get("to", "")
 
-            if to_addr.lower() != wallet.lower():
-                continue
+def check_payments() -> None:
+    transfers: list[dict] = []
 
-            if amount < config.CRYPTO_MIN_USDT:
-                log.debug(f"Skipping small payment: {amount:.2f} {token} txid={txid}")
-                continue
+    if config.CRYPTO_WALLET_TRX:
+        transfers += _fetch_trc20(config.CRYPTO_WALLET_TRX)
 
-            # Try to match to a pending payment by expected amount
-            pending = db.match_pending_payment(amount)
-            if pending:
-                code = _new_invite_code()
-                db.create_invite_code(code, pending["email"])
-                db.record_crypto_payment(
-                    txid=txid,
-                    from_address=tx.get("from", ""),
-                    amount=amount,
-                    token=token,
-                    email=pending["email"],
-                    invite_code=code,
-                )
-                db.delete_pending_payment(pending["id"])
-                mailer.send_invite_code(pending["email"], code)
-                log.info(
-                    f"Payment matched: {amount:.2f} {token} txid={txid[:16]}… "
-                    f"→ invite code sent to {pending['email']}"
-                )
-            else:
-                # No pending request matched — record for manual review
-                db.record_crypto_payment(
-                    txid=txid,
-                    from_address=tx.get("from", ""),
-                    amount=amount,
-                    token=token,
-                    email=None,
-                    invite_code=None,
-                )
-                log.warning(
-                    f"Unmatched payment: {amount:.2f} {token} txid={txid[:16]}… "
-                    f"— no pending payment request found (manual review needed)"
-                )
+    if config.CRYPTO_WALLET_EVM:
+        transfers += _fetch_evm(config.CRYPTO_WALLET_EVM, "BASE")
+        if config.ETHERSCAN_API_KEY:
+            transfers += _fetch_evm(config.CRYPTO_WALLET_EVM, "ETH")
+
+    if config.CRYPTO_WALLET_SOL:
+        transfers += _fetch_solana(config.CRYPTO_WALLET_SOL)
+
+    for tx in transfers:
+        _process_transfer(tx)
+
+
+def active_networks() -> list[dict]:
+    """Return a list of configured networks for the checkout page."""
+    nets = []
+    if config.CRYPTO_WALLET_TRX:
+        nets.append({
+            "name":    "Tron (TRC20)",
+            "tokens":  "USDT, USDC",
+            "wallet":  config.CRYPTO_WALLET_TRX,
+            "fees":    "~0.1 USDT",
+            "chain_id": "trx",
+        })
+    if config.CRYPTO_WALLET_EVM:
+        nets.append({
+            "name":    "BASE",
+            "tokens":  "USDC, USDT",
+            "wallet":  config.CRYPTO_WALLET_EVM,
+            "fees":    "~0.01 USDT",
+            "chain_id": "base",
+        })
+        if config.ETHERSCAN_API_KEY:
+            nets.append({
+                "name":    "Ethereum (ERC20)",
+                "tokens":  "USDT, USDC",
+                "wallet":  config.CRYPTO_WALLET_EVM,
+                "fees":    "~5–15 USDT",
+                "chain_id": "eth",
+            })
+    if config.CRYPTO_WALLET_SOL and config.HELIUS_API_KEY:
+        nets.append({
+            "name":    "Solana",
+            "tokens":  "USDT, USDC",
+            "wallet":  config.CRYPTO_WALLET_SOL,
+            "fees":    "~0.01 USDT",
+            "chain_id": "sol",
+        })
+    return nets
 
 
 def watcher_loop(stop_event) -> None:
-    wallet = config.CRYPTO_WALLET_ADDRESS
-    if not wallet:
-        log.info("CRYPTO_WALLET_ADDRESS not configured — watcher disabled.")
+    nets = active_networks()
+    if not nets:
+        log.info("No crypto wallet addresses configured — watcher disabled.")
         return
-    log.info(f"Crypto watcher started — monitoring {wallet} on TRC20 (USDT + USDC)")
+    names = ", ".join(n["name"] for n in nets)
+    log.info(f"Crypto watcher started — monitoring: {names}")
     while not stop_event.is_set():
         try:
             check_payments()

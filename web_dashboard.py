@@ -142,9 +142,10 @@ def api_admin_invite():
 
 @app.route("/checkout")
 def checkout():
+    import crypto_watcher
     return render_template(
         "checkout.html",
-        crypto_enabled=bool(config.CRYPTO_WALLET_ADDRESS),
+        networks=crypto_watcher.active_networks(),
         price=config.CRYPTO_PRICE_USDT,
     )
 
@@ -152,7 +153,9 @@ def checkout():
 @app.route("/api/create_payment", methods=["POST"])
 def create_payment():
     """Generate a unique payment amount for the buyer and store the pending request."""
-    if not config.CRYPTO_WALLET_ADDRESS:
+    import crypto_watcher
+    nets = crypto_watcher.active_networks()
+    if not nets:
         return jsonify({"error": "Crypto payments not configured."}), 503
 
     data  = request.get_json(force=True) or {}
@@ -164,14 +167,12 @@ def create_payment():
     existing = db.get_pending_payment_by_email(email)
     if existing:
         return jsonify({
-            "wallet":  config.CRYPTO_WALLET_ADDRESS,
-            "amount":  existing["expected_amount"],
-            "token":   "USDT",
-            "network": "TRC20 (Tron)",
+            "amount":   existing["expected_amount"],
+            "networks": nets,
         })
 
     # Generate a unique micro-amount so the payment can be matched without a memo
-    base = config.CRYPTO_PRICE_USDT
+    base   = config.CRYPTO_PRICE_USDT
     amount = base
     for _ in range(30):
         candidate = round(base + random.randint(1, 97) / 100, 2)
@@ -181,10 +182,8 @@ def create_payment():
     db.create_pending_payment(email, amount)
 
     return jsonify({
-        "wallet":  config.CRYPTO_WALLET_ADDRESS,
-        "amount":  amount,
-        "token":   "USDT",
-        "network": "TRC20 (Tron)",
+        "amount":   amount,
+        "networks": nets,
     })
 
 

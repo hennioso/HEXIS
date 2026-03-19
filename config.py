@@ -98,16 +98,35 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")          # app password
 SMTP_FROM     = os.getenv("SMTP_FROM",     SMTP_USER)   # display sender
 
 # ---- Crypto Payments -------------------------------------------------------
-# TRC20 wallet address (Tron network) — USDT and USDC are both accepted.
-# Leave empty to disable the payment/checkout flow.
-CRYPTO_WALLET_ADDRESS = os.getenv("CRYPTO_WALLET_ADDRESS", "")
+# Set at least one wallet address to enable the checkout flow.
+# Each buyer receives a unique micro-amount (e.g. 49.07 USDT) so payments
+# can be matched without a memo/tag.
+
+# Tron (TRC20) — accepts USDT + USDC. No API key required.
+CRYPTO_WALLET_TRX = os.getenv("CRYPTO_WALLET_TRX",
+                               os.getenv("CRYPTO_WALLET_ADDRESS", ""))  # backward-compat alias
+
+# BASE + Ethereum (ERC20) — same EVM address works for both chains.
+# BASE is monitored if BASESCAN_API_KEY is set.
+# Ethereum mainnet is additionally monitored if ETHERSCAN_API_KEY is set.
+CRYPTO_WALLET_EVM    = os.getenv("CRYPTO_WALLET_EVM", "")
+BASESCAN_API_KEY     = os.getenv("BASESCAN_API_KEY",  "")
+ETHERSCAN_API_KEY    = os.getenv("ETHERSCAN_API_KEY", "")
+
+# Solana — accepts USDT + USDC (SPL). Requires a Helius API key (free tier).
+CRYPTO_WALLET_SOL = os.getenv("CRYPTO_WALLET_SOL", "")
+HELIUS_API_KEY    = os.getenv("HELIUS_API_KEY",    "")
+
+# Optional TronGrid Pro API key — increases rate limits for Tron.
+TRONGRID_API_KEY  = os.getenv("TRONGRID_API_KEY", "")
+
 # Minimum qualifying payment in USDT (inclusive). Payments below this are ignored.
-CRYPTO_MIN_USDT       = float(os.getenv("CRYPTO_MIN_USDT",   "48.0"))
-# Base price shown on the checkout page. Each buyer gets a unique micro-amount
-# (e.g. 49.07) so payments can be matched without a memo/tag.
-CRYPTO_PRICE_USDT     = float(os.getenv("CRYPTO_PRICE_USDT", "49.0"))
-# Optional TronGrid Pro API key — increases rate limits.
-TRONGRID_API_KEY      = os.getenv("TRONGRID_API_KEY", "")
+CRYPTO_MIN_USDT   = float(os.getenv("CRYPTO_MIN_USDT",   "48.0"))
+# Base price shown on the checkout page.
+CRYPTO_PRICE_USDT = float(os.getenv("CRYPTO_PRICE_USDT", "49.0"))
+
+# Legacy alias used in run.py start condition
+CRYPTO_WALLET_ADDRESS = CRYPTO_WALLET_TRX or CRYPTO_WALLET_EVM or CRYPTO_WALLET_SOL
 
 # ---- Circuit Breakers ------------------------------------------------------
 # Pause ALL trading when today's realized PnL drops below this value (UTC day).

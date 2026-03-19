@@ -14,7 +14,7 @@
     body { background: var(--bg); color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-    .wrap { width: 100%; max-width: 460px; padding: 20px; }
+    .wrap { width: 100%; max-width: 480px; padding: 20px; }
     .logo { text-align: center; margin-bottom: 32px; }
     .logo h1 { font-size: 26px; font-weight: 700; letter-spacing: .06em; }
     .logo p  { color: var(--muted); font-size: 13px; margin-top: 6px; }
@@ -42,21 +42,37 @@
       cursor: pointer; transition: opacity .15s; }
     .btn:hover { opacity: .85; }
     .btn:disabled { opacity: .5; cursor: not-allowed; }
-    /* Payment steps */
-    #step-email  { }
+    /* Steps */
+    #step-email { }
+    #step-network { display: none; }
     #step-pay    { display: none; }
     #step-done   { display: none; }
+    /* Network selector */
+    .net-grid { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+    .net-card { background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 16px; cursor: pointer;
+      transition: border-color .15s; display: flex; align-items: center; gap: 14px; }
+    .net-card:hover { border-color: var(--accent); }
+    .net-card.active { border-color: var(--green); }
+    .net-icon { font-size: 22px; flex-shrink: 0; }
+    .net-info { flex: 1; }
+    .net-name  { font-size: 14px; font-weight: 600; }
+    .net-tokens { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .net-fee { font-size: 11px; color: var(--muted); text-align: right; white-space: nowrap; }
+    .back-link { display: inline-block; font-size: 12px; color: var(--muted);
+      cursor: pointer; margin-bottom: 16px; }
+    .back-link:hover { color: var(--text); }
+    /* Payment box */
     .payment-box { background: var(--bg); border: 1px solid var(--border);
-      border-radius: 10px; padding: 20px; margin-bottom: 20px; }
-    .payment-box .label { font-size: 11px; color: var(--muted);
+      border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+    .pay-label { font-size: 11px; color: var(--muted);
       text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
-    .amount-row { display: flex; align-items: center; justify-content: space-between;
-      margin-bottom: 14px; }
+    .amount-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
     .amount-val { font-size: 22px; font-weight: 700; color: var(--green); }
     .token-badge { font-size: 12px; font-weight: 600; background: rgba(63,185,80,.15);
       color: var(--green); padding: 3px 8px; border-radius: 4px; }
-    .network-badge { font-size: 11px; color: var(--muted); margin-top: 4px; }
-    .wallet-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+    .network-badge { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+    .wallet-row { display: flex; align-items: center; gap: 8px; }
     .wallet-addr { font-size: 12px; font-family: monospace; color: var(--accent);
       word-break: break-all; flex: 1; }
     .copy-btn { flex-shrink: 0; padding: 6px 10px; background: var(--card);
@@ -67,7 +83,7 @@
       background: white; padding: 8px; }
     .warning-box { background: rgba(210,153,34,.1); border: 1px solid rgba(210,153,34,.3);
       border-radius: 8px; padding: 12px 14px; font-size: 12px; color: var(--yellow);
-      margin-bottom: 16px; line-height: 1.5; }
+      margin-bottom: 14px; line-height: 1.5; }
     .info-box { background: rgba(88,166,255,.07); border: 1px solid rgba(88,166,255,.25);
       border-radius: 8px; padding: 12px 14px; font-size: 13px; color: var(--muted);
       margin-bottom: 20px; line-height: 1.5; }
@@ -111,7 +127,7 @@
         <div><div class="price-label">One-time fee</div></div>
         <div style="text-align:right">
           <div class="price-amount">~${{ price }} USDT</div>
-          <div class="price-note">TRC20 (Tron) · one-time</div>
+          <div class="price-note">crypto · one-time</div>
         </div>
       </div>
 
@@ -123,7 +139,7 @@
         <div class="feat"><span class="feat-icon">✓</span> Invite code emailed instantly after payment</div>
       </div>
 
-      {% if crypto_enabled %}
+      {% if networks %}
 
       <!-- Step 1: enter email -->
       <div id="step-email">
@@ -132,22 +148,35 @@
           <label>Email for invite code</label>
           <input type="email" id="email-input" placeholder="you@example.com" autocomplete="email" />
         </div>
-        <button class="btn" onclick="generateAddress()">Generate Payment Address →</button>
+        <button class="btn" onclick="generatePayment()">Continue →</button>
       </div>
 
-      <!-- Step 2: send payment -->
+      <!-- Step 2: choose network -->
+      <div id="step-network">
+        <span class="back-link" onclick="goBack('step-email', 'step-network')">← Back</span>
+        <div class="field">
+          <label>Select payment network</label>
+        </div>
+        <div class="net-grid" id="net-grid"></div>
+        <button class="btn" id="select-net-btn" onclick="selectNetwork()" disabled>
+          Show Payment Address →
+        </button>
+      </div>
+
+      <!-- Step 3: send payment -->
       <div id="step-pay">
+        <span class="back-link" onclick="goBack('step-network', 'step-pay')">← Back</span>
         <div class="warning-box">
           ⚠ Send <strong>exactly</strong> the amount shown below. Payments with a different amount cannot be matched automatically.
         </div>
         <div class="payment-box">
-          <div class="label">Send exactly</div>
+          <div class="pay-label">Send exactly</div>
           <div class="amount-row">
             <span class="amount-val" id="pay-amount">—</span>
-            <span class="token-badge">USDT</span>
+            <span class="token-badge" id="pay-token">USDT</span>
           </div>
-          <div class="network-badge">Network: TRC20 (Tron)</div>
-          <div class="label" style="margin-top:14px">To this wallet</div>
+          <div class="network-badge" id="pay-network">—</div>
+          <div class="pay-label">To this address</div>
           <div class="wallet-row">
             <span class="wallet-addr" id="pay-wallet">—</span>
             <button class="copy-btn" onclick="copyWallet()">Copy</button>
@@ -156,11 +185,11 @@
         </div>
         <div class="status-row">
           <div class="spinner"></div>
-          <span id="status-text">Waiting for payment confirmation… (checks every 15s)</span>
+          <span id="status-text">Waiting for on-chain confirmation… (checks every 15 s)</span>
         </div>
       </div>
 
-      <!-- Step 3: payment confirmed -->
+      <!-- Step 4: payment confirmed -->
       <div id="step-done">
         <div class="done-icon">✅</div>
         <p style="text-align:center;font-size:14px;color:var(--muted);margin-bottom:8px">
@@ -195,21 +224,49 @@
     </div>
   </div>
 
-  <!-- Minimal QR code generator (no CDN dependency) -->
   <script>
-  // Tiny QR placeholder using a data URL canvas approach — uses Google Charts API
-  // for a self-contained, dependency-free QR that works offline too if needed.
-  function drawQR(text) {
-    const canvas = document.getElementById('qr-canvas');
-    const ctx = canvas.getContext('2d');
-    const img = new Image();
-    img.onload = () => ctx.drawImage(img, 0, 0, 160, 160);
-    img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=' + encodeURIComponent(text);
+  // Network data injected from backend
+  const NETWORKS = {{ networks | tojson }};
+
+  const NET_ICONS = { trx: '⚡', base: '🔵', eth: '🔷', sol: '🟣' };
+
+  let _email    = '';
+  let _amount   = 0;
+  let _allNets  = [];
+  let _selNet   = null;
+  let _pollTimer = null;
+
+  // Build network cards
+  const grid = document.getElementById('net-grid');
+  if (grid) {
+    NETWORKS.forEach((net, i) => {
+      const card = document.createElement('div');
+      card.className = 'net-card';
+      card.dataset.idx = i;
+      card.innerHTML = `
+        <div class="net-icon">${NET_ICONS[net.chain_id] || '💎'}</div>
+        <div class="net-info">
+          <div class="net-name">${net.name}</div>
+          <div class="net-tokens">${net.tokens}</div>
+        </div>
+        <div class="net-fee">Fee ≈ ${net.fees}</div>`;
+      card.onclick = () => {
+        document.querySelectorAll('.net-card').forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+        _selNet = net;
+        document.getElementById('select-net-btn').disabled = false;
+      };
+      grid.appendChild(card);
+    });
   }
 
-  let _email = '';
-  let _wallet = '';
-  let _pollTimer = null;
+  function show(id) { document.getElementById(id).style.display = 'block'; }
+  function hide(id) { document.getElementById(id).style.display = 'none'; }
+
+  function goBack(showId, hideId) {
+    hide(hideId);
+    show(showId);
+  }
 
   function showError(msg) {
     const b = document.getElementById('error-box');
@@ -217,19 +274,15 @@
     b.style.display = 'block';
   }
 
-  async function generateAddress() {
-    const emailInput = document.getElementById('email-input');
-    _email = emailInput.value.trim();
+  async function generatePayment() {
+    _email = document.getElementById('email-input').value.trim();
     document.getElementById('error-box').style.display = 'none';
     if (!_email || !_email.includes('@')) {
       showError('Please enter a valid email address.');
       return;
     }
-
     const btn = document.querySelector('#step-email .btn');
-    btn.disabled = true;
-    btn.textContent = 'Generating…';
-
+    btn.disabled = true; btn.textContent = 'Please wait…';
     try {
       const r = await fetch('/api/create_payment', {
         method: 'POST',
@@ -237,25 +290,40 @@
         body: JSON.stringify({email: _email})
       });
       const d = await r.json();
-      if (d.error) { showError(d.error); btn.disabled = false; btn.textContent = 'Generate Payment Address →'; return; }
-
-      _wallet = d.wallet;
-      document.getElementById('pay-amount').textContent = d.amount.toFixed(2);
-      document.getElementById('pay-wallet').textContent = _wallet;
-      drawQR(_wallet);
-
-      document.getElementById('step-email').style.display = 'none';
-      document.getElementById('step-pay').style.display = 'block';
-      startPolling();
+      if (d.error) { showError(d.error); btn.disabled = false; btn.textContent = 'Continue →'; return; }
+      _amount  = d.amount;
+      _allNets = d.networks;
+      hide('step-email');
+      show('step-network');
     } catch(e) {
       showError('Network error. Please try again.');
-      btn.disabled = false;
-      btn.textContent = 'Generate Payment Address →';
+      btn.disabled = false; btn.textContent = 'Continue →';
     }
   }
 
+  function selectNetwork() {
+    if (!_selNet) return;
+    document.getElementById('pay-amount').textContent  = _amount.toFixed(2);
+    document.getElementById('pay-token').textContent   = _selNet.tokens.split(',')[0].trim();
+    document.getElementById('pay-network').textContent = 'Network: ' + _selNet.name;
+    document.getElementById('pay-wallet').textContent  = _selNet.wallet;
+    drawQR(_selNet.wallet);
+    hide('step-network');
+    show('step-pay');
+    startPolling();
+  }
+
+  function drawQR(text) {
+    const canvas = document.getElementById('qr-canvas');
+    const ctx    = canvas.getContext('2d');
+    const img    = new Image();
+    img.onload = () => ctx.drawImage(img, 0, 0, 160, 160);
+    img.src = 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=' + encodeURIComponent(text);
+  }
+
   function copyWallet() {
-    navigator.clipboard.writeText(_wallet).then(() => {
+    const addr = document.getElementById('pay-wallet').textContent;
+    navigator.clipboard.writeText(addr).then(() => {
       const b = document.querySelector('.copy-btn');
       b.textContent = 'Copied!';
       setTimeout(() => b.textContent = 'Copy', 2000);
@@ -272,11 +340,9 @@
       const d = await r.json();
       if (d.status === 'confirmed') {
         clearInterval(_pollTimer);
-        document.getElementById('step-pay').style.display = 'none';
-        document.getElementById('step-done').style.display = 'block';
+        hide('step-pay');
+        show('step-done');
         document.getElementById('done-code').textContent = d.code;
-      } else if (d.status === 'pending') {
-        document.getElementById('status-text').textContent = 'Waiting for payment confirmation… (checks every 15s)';
       }
     } catch(e) { /* silent — will retry */ }
   }
