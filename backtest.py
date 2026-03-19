@@ -47,7 +47,7 @@ def run_backtest(symbol: str, strategy: str, days: int = 7):
     tp_pct = config.TAKE_PROFIT_PCT if strategy == "trend" else config.SCALP_TAKE_PROFIT_PCT
 
     rm = RiskManager(
-        risk_per_trade=config.RISK_PER_TRADE,
+        position_margin_pct=config.POSITION_MARGIN_PCT,
         stop_loss_pct=sl_pct,
         take_profit_pct=tp_pct,
         leverage=config.LEVERAGE,
@@ -70,23 +70,23 @@ def run_backtest(symbol: str, strategy: str, days: int = 7):
             if direction == "long":
                 if high >= tp_price:
                     pnl_pct = (tp_price - entry_price) / entry_price * config.LEVERAGE
-                    balance *= (1 + pnl_pct * config.RISK_PER_TRADE)
+                    balance *= (1 + pnl_pct * config.POSITION_MARGIN_PCT)
                     trades.append({"result": "tp_hit", "pnl_pct": pnl_pct * 100})
                     in_trade = False
                 elif low <= sl_price:
                     pnl_pct = (sl_price - entry_price) / entry_price * config.LEVERAGE
-                    balance *= (1 + pnl_pct * config.RISK_PER_TRADE)
+                    balance *= (1 + pnl_pct * config.POSITION_MARGIN_PCT)
                     trades.append({"result": "sl_hit", "pnl_pct": pnl_pct * 100})
                     in_trade = False
             else:  # short
                 if low <= tp_price:
                     pnl_pct = (entry_price - tp_price) / entry_price * config.LEVERAGE
-                    balance *= (1 + pnl_pct * config.RISK_PER_TRADE)
+                    balance *= (1 + pnl_pct * config.POSITION_MARGIN_PCT)
                     trades.append({"result": "tp_hit", "pnl_pct": pnl_pct * 100})
                     in_trade = False
                 elif high >= sl_price:
                     pnl_pct = (entry_price - sl_price) / entry_price * config.LEVERAGE
-                    balance *= (1 + pnl_pct * config.RISK_PER_TRADE)
+                    balance *= (1 + pnl_pct * config.POSITION_MARGIN_PCT)
                     trades.append({"result": "sl_hit", "pnl_pct": pnl_pct * 100})
                     in_trade = False
             continue
@@ -171,7 +171,7 @@ def run_backtest_api(symbol: str, strategy: str, days: int = 7) -> dict:
     tp_pct = config.TAKE_PROFIT_PCT if strategy == "trend" else config.SCALP_TAKE_PROFIT_PCT
 
     rm = RiskManager(
-        risk_per_trade=config.RISK_PER_TRADE,
+        position_margin_pct=config.POSITION_MARGIN_PCT,
         stop_loss_pct=sl_pct,
         take_profit_pct=tp_pct,
         leverage=config.LEVERAGE,
@@ -195,26 +195,26 @@ def run_backtest_api(symbol: str, strategy: str, days: int = 7) -> dict:
             if direction == "long":
                 if high >= tp_price:
                     pnl_pct = (tp_price - entry_price) / entry_price * config.LEVERAGE
-                    balance *= (1 + pnl_pct * config.RISK_PER_TRADE)
+                    balance *= (1 + pnl_pct * config.POSITION_MARGIN_PCT)
                     trades.append({"result": "tp_hit", "pnl_pct": round(pnl_pct * 100, 3)})
                     equity_curve.append({"candle": i, "balance": round(balance, 2)})
                     in_trade = False
                 elif low <= sl_price:
                     pnl_pct = (sl_price - entry_price) / entry_price * config.LEVERAGE
-                    balance *= (1 + pnl_pct * config.RISK_PER_TRADE)
+                    balance *= (1 + pnl_pct * config.POSITION_MARGIN_PCT)
                     trades.append({"result": "sl_hit", "pnl_pct": round(pnl_pct * 100, 3)})
                     equity_curve.append({"candle": i, "balance": round(balance, 2)})
                     in_trade = False
             else:
                 if low <= tp_price:
                     pnl_pct = (entry_price - tp_price) / entry_price * config.LEVERAGE
-                    balance *= (1 + pnl_pct * config.RISK_PER_TRADE)
+                    balance *= (1 + pnl_pct * config.POSITION_MARGIN_PCT)
                     trades.append({"result": "tp_hit", "pnl_pct": round(pnl_pct * 100, 3)})
                     equity_curve.append({"candle": i, "balance": round(balance, 2)})
                     in_trade = False
                 elif high >= sl_price:
                     pnl_pct = (entry_price - sl_price) / entry_price * config.LEVERAGE
-                    balance *= (1 + pnl_pct * config.RISK_PER_TRADE)
+                    balance *= (1 + pnl_pct * config.POSITION_MARGIN_PCT)
                     trades.append({"result": "sl_hit", "pnl_pct": round(pnl_pct * 100, 3)})
                     equity_curve.append({"candle": i, "balance": round(balance, 2)})
                     in_trade = False
