@@ -10,8 +10,10 @@ load_dotenv()
 
 
 # ---- API Credentials -------------------------------------------------------
-API_KEY = os.environ["BITUNIX_API_KEY"]
-SECRET_KEY = os.environ["BITUNIX_SECRET_KEY"]
+# Legacy: used only as fallback for the admin account or single-user mode.
+# In multi-user mode each user enters their own keys via the dashboard.
+API_KEY    = os.getenv("BITUNIX_API_KEY",    "")
+SECRET_KEY = os.getenv("BITUNIX_SECRET_KEY", "")
 
 # ---- Trading Symbols -------------------------------------------------------
 SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT", "HYPEUSDT", "ADAUSDT"]
