@@ -902,18 +902,32 @@
       <input id="settings-secret-key" type="password" placeholder="Bitunix Secret Key"
         style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:9px 12px;color:#e6edf3;font-size:14px;font-family:monospace"/>
     </div>
-    <button onclick="saveApiKeys()"
+
+    <div style="margin-bottom:20px">
+      <label style="display:block;font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">
+        Margin per Trade: <span id="margin-pct-display" style="color:#e6edf3;font-weight:700">7.5%</span>
+      </label>
+      <input id="settings-margin-pct" type="range" min="0.5" max="25" step="0.5" value="7.5"
+        oninput="document.getElementById('margin-pct-display').textContent = parseFloat(this.value).toFixed(1) + '%'"
+        style="width:100%;accent-color:#3fb950;cursor:pointer"/>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:#484f58;margin-top:4px">
+        <span>0.5%</span><span style="color:#8b949e;font-size:11px">% of total equity used as margin</span><span>25%</span>
+      </div>
+    </div>
+
+    <button onclick="saveSettings()"
       style="width:100%;padding:10px;background:#3fb950;color:#000;font-weight:700;font-size:14px;border:none;border-radius:8px;cursor:pointer">
-      Save Keys
+      Save Settings
     </button>
   </div>
 </div>
 
 <script>
 function openSettings() {
+  const modal = document.getElementById('settings-modal');
+  modal.style.display = 'flex';
+  // Load API key status
   fetch('/api/user/keys').then(r => r.json()).then(d => {
-    const modal = document.getElementById('settings-modal');
-    modal.style.display = 'flex';
     const status = document.getElementById('settings-status');
     if (d.has_keys) {
       status.style.display = 'block';
@@ -925,6 +939,12 @@ function openSettings() {
       status.style.display = 'none';
     }
   });
+  // Load current margin setting
+  fetch('/api/user/settings').then(r => r.json()).then(d => {
+    const pct = (d.margin_pct * 100).toFixed(1);
+    document.getElementById('settings-margin-pct').value = pct;
+    document.getElementById('margin-pct-display').textContent = pct + '%';
+  });
 }
 function closeSettings() {
   document.getElementById('settings-modal').style.display = 'none';
@@ -932,38 +952,50 @@ function closeSettings() {
   document.getElementById('settings-api-key').value = '';
   document.getElementById('settings-secret-key').value = '';
 }
-function saveApiKeys() {
+async function saveSettings() {
   const api_key    = document.getElementById('settings-api-key').value.trim();
   const secret_key = document.getElementById('settings-secret-key').value.trim();
+  const margin_pct = parseFloat(document.getElementById('settings-margin-pct').value) / 100;
   const status     = document.getElementById('settings-status');
-  if (!api_key || !secret_key) {
+
+  const showError = msg => {
     status.style.display = 'block';
     status.style.background = 'rgba(248,81,73,0.1)';
     status.style.border = '1px solid rgba(248,81,73,0.3)';
     status.style.color = '#f85149';
-    status.textContent = 'Both API key and Secret key are required.';
-    return;
-  }
-  fetch('/api/user/keys', {
+    status.textContent = msg;
+  };
+  const showOk = msg => {
+    status.style.display = 'block';
+    status.style.background = 'rgba(63,185,80,0.1)';
+    status.style.border = '1px solid rgba(63,185,80,0.3)';
+    status.style.color = '#3fb950';
+    status.textContent = msg;
+  };
+
+  // Save margin pct (always)
+  const mRes = await fetch('/api/user/settings', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({api_key, secret_key})
-  }).then(r => r.json()).then(d => {
-    status.style.display = 'block';
-    if (d.ok) {
-      status.style.background = 'rgba(63,185,80,0.1)';
-      status.style.border = '1px solid rgba(63,185,80,0.3)';
-      status.style.color = '#3fb950';
-      status.textContent = '✓ Keys saved. Bot will start trading with your account within 60 seconds.';
-      document.getElementById('settings-api-key').value = '';
-      document.getElementById('settings-secret-key').value = '';
-    } else {
-      status.style.background = 'rgba(248,81,73,0.1)';
-      status.style.border = '1px solid rgba(248,81,73,0.3)';
-      status.style.color = '#f85149';
-      status.textContent = d.error || 'Failed to save keys.';
-    }
-  });
+    body: JSON.stringify({margin_pct})
+  }).then(r => r.json());
+  if (!mRes.ok) { showError(mRes.error || 'Failed to save margin setting.'); return; }
+
+  // Save API keys only if provided
+  if (api_key || secret_key) {
+    if (!api_key || !secret_key) { showError('Both API key and Secret key are required.'); return; }
+    const kRes = await fetch('/api/user/keys', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({api_key, secret_key})
+    }).then(r => r.json());
+    if (!kRes.ok) { showError(kRes.error || 'Failed to save keys.'); return; }
+    document.getElementById('settings-api-key').value = '';
+    document.getElementById('settings-secret-key').value = '';
+    showOk('✓ Settings and API keys saved.');
+  } else {
+    showOk('✓ Settings saved.');
+  }
 }
 // Close on backdrop click
 document.getElementById('settings-modal').addEventListener('click', function(e) {

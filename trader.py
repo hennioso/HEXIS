@@ -26,15 +26,21 @@ def _qty_str(qty: float) -> str:
 
 
 class Trader:
-    def __init__(self, client: BitunixClient, risk_manager: RiskManager, symbol: str):
+    def __init__(self, client: BitunixClient, risk_manager: RiskManager, symbol: str, user_id: int = None):
         self.client = client
         self.rm = risk_manager
         self.symbol = symbol
+        self.user_id = user_id
         self.current_position: Optional[dict] = None
         self._current_trade_id: Optional[str] = None  # DB trade ID of the open position
         self._last_sniper_swing: tuple[float, float] | None = None  # (swing_high, swing_low) of last entry
         db.init_db()
         self._recover_open_position()
+
+    def _refresh_margin_pct(self):
+        """Pull per-user margin_pct from DB and apply to risk manager before each trade."""
+        if self.user_id is not None:
+            self.rm.position_margin_pct = db.get_user_margin_pct(self.user_id)
 
     def _recover_open_position(self):
         """
@@ -199,6 +205,7 @@ class Trader:
         Opens a new position based on the signal.
         Returns the order response or None on error.
         """
+        self._refresh_margin_pct()
         # Circuit breaker check
         ok, reason = circuit_breaker.is_trading_allowed(strategy)
         if not ok:
@@ -293,6 +300,7 @@ class Trader:
         Opens a SNIPER position at Fib 0.882 with a structural SL.
         No exchange TP is set — partial TPs are managed by monitor_sniper_tps().
         """
+        self._refresh_margin_pct()
         ok, reason = circuit_breaker.is_trading_allowed("sniper")
         if not ok:
             logger.warning(f"Circuit breaker blocked SNIPER: {reason}")
@@ -433,6 +441,7 @@ class Trader:
         SL is placed structurally beyond the sweep wick.
         TP targets the prior opposite liquidity.
         """
+        self._refresh_margin_pct()
         ok, reason = circuit_breaker.is_trading_allowed("lsob")
         if not ok:
             logger.warning(f"Circuit breaker blocked LSOB: {reason}")
@@ -571,6 +580,7 @@ class Trader:
         SL is placed structurally beyond the gap boundary.
         TP is a measured move of 2× the gap size.
         """
+        self._refresh_margin_pct()
         ok, reason = circuit_breaker.is_trading_allowed("fvg")
         if not ok:
             logger.warning(f"Circuit breaker blocked FVG: {reason}")

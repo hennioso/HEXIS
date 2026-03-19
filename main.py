@@ -48,10 +48,11 @@ def symbol_loop(
     client: BitunixClient,
     risk_manager: RiskManager,
     stop_event: threading.Event,
+    user_id: int = None,
 ):
     """Trading loop for a single symbol – runs in its own thread."""
     log = logging.getLogger(symbol)
-    trader = Trader(client=client, risk_manager=risk_manager, symbol=symbol)
+    trader = Trader(client=client, risk_manager=risk_manager, symbol=symbol, user_id=user_id)
     log.info(f"Thread started | Strategy: {strategy.upper()}")
     _last_strategy = strategy  # track for change detection
 
@@ -207,6 +208,7 @@ def agent_scanner_loop(
     client: BitunixClient,
     risk_managers: dict,
     stop_event: threading.Event,
+    user_id: int = None,
 ):
     """
     Global scanner for all symbols currently in AUTO mode.
@@ -222,7 +224,7 @@ def agent_scanner_loop(
 
     # Create one Trader per symbol (covers any symbol that may become "auto" at runtime)
     traders = {
-        sym: Trader(client=client, risk_manager=risk_managers["trend"], symbol=sym)
+        sym: Trader(client=client, risk_manager=risk_managers["trend"], symbol=sym, user_id=user_id)
         for sym in config.SYMBOLS
     }
     log.info("Agent Scanner started — waiting for AUTO symbols.")
@@ -469,7 +471,7 @@ def _start_user_trading(user: dict, global_stop: threading.Event):
     # Agent scanner
     scanner = threading.Thread(
         target=agent_scanner_loop,
-        args=(client, risk_managers, stop_event),
+        args=(client, risk_managers, stop_event, uid),
         name=f"AgentScanner-{uid}",
         daemon=True,
     )
@@ -481,7 +483,7 @@ def _start_user_trading(user: dict, global_stop: threading.Event):
         rm = risk_managers.get(strategy, risk_managers["trend"])
         t = threading.Thread(
             target=symbol_loop,
-            args=(symbol, strategy, client, rm, stop_event),
+            args=(symbol, strategy, client, rm, stop_event, uid),
             name=f"{symbol}-{uid}",
             daemon=True,
         )

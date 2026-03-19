@@ -213,6 +213,30 @@ def logout():
     return redirect(url_for("login"))
 
 
+@app.route("/api/user/settings", methods=["GET", "POST"])
+def api_user_settings():
+    """Get or update per-user trading settings (e.g. margin_pct)."""
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "not logged in"}), 401
+    if request.method == "POST":
+        data = request.get_json(force=True) or {}
+        pct  = data.get("margin_pct")
+        if pct is None:
+            return jsonify({"error": "margin_pct required"}), 400
+        try:
+            pct = float(pct)
+        except (TypeError, ValueError):
+            return jsonify({"error": "margin_pct must be a number"}), 400
+        if not (0.001 <= pct <= 1.0):
+            return jsonify({"error": "margin_pct must be between 0.1% and 100%"}), 400
+        db.update_user_margin_pct(user_id, pct)
+        return jsonify({"ok": True, "margin_pct": round(pct, 4)})
+    # GET
+    pct = db.get_user_margin_pct(user_id)
+    return jsonify({"margin_pct": pct})
+
+
 @app.route("/api/user/keys", methods=["GET", "POST"])
 def api_user_keys():
     """Get or update the logged-in user's Bitunix API credentials."""

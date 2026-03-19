@@ -114,6 +114,9 @@ def init_db():
         """)
         conn.commit()
 
+        # Migration: per-user position sizing control
+        _add_column_if_missing(conn, "users", "margin_pct", "REAL DEFAULT 0.075")
+
 
 def _add_column_if_missing(conn, table: str, column: str, col_type: str):
     """Safely adds a column to an existing table (no-op if already present)."""
@@ -588,6 +591,23 @@ def update_user_api_keys(user_id: int, api_key: str, secret_key: str):
             "UPDATE users SET api_key_enc = ?, secret_key_enc = ? WHERE id = ?",
             (_encrypt(api_key), _encrypt(secret_key), user_id),
         )
+        conn.commit()
+
+
+def get_user_margin_pct(user_id: int) -> float:
+    """Return the per-user margin % (0–1). Falls back to 0.075 if not set."""
+    with _connect() as conn:
+        row = conn.execute("SELECT margin_pct FROM users WHERE id = ?", (user_id,)).fetchone()
+        if row and row["margin_pct"] is not None:
+            return float(row["margin_pct"])
+    return 0.075
+
+
+def update_user_margin_pct(user_id: int, pct: float):
+    """Store the per-user margin % (value between 0.001 and 1.0)."""
+    pct = max(0.001, min(1.0, pct))
+    with _connect() as conn:
+        conn.execute("UPDATE users SET margin_pct = ? WHERE id = ?", (round(pct, 4), user_id))
         conn.commit()
 
 
