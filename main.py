@@ -577,76 +577,10 @@ def main():
         max_consecutive_losses=config.MAX_CONSECUTIVE_LOSSES,
     )
 
-    client = BitunixClient(config.API_KEY, config.SECRET_KEY)
-
-    # Three RiskManager instances – one per strategy
-    risk_manager_trend = RiskManager(
-        position_margin_pct=config.POSITION_MARGIN_PCT,
-        risk_per_trade=config.RISK_PER_TRADE,
-        stop_loss_pct=config.STOP_LOSS_PCT,
-        take_profit_pct=config.TAKE_PROFIT_PCT,
-        leverage=config.LEVERAGE,
-        max_margin_usdt=config.MAX_MARGIN_USDT,
-        max_margin_trades=config.MAX_MARGIN_TRADES,
-        max_margin_pct=config.MAX_MARGIN_PCT,
-    )
-    risk_manager_scalp = RiskManager(
-        position_margin_pct=config.POSITION_MARGIN_PCT,
-        risk_per_trade=config.RISK_PER_TRADE,
-        stop_loss_pct=config.SCALP_STOP_LOSS_PCT,
-        take_profit_pct=config.SCALP_TAKE_PROFIT_PCT,
-        leverage=config.LEVERAGE,
-        max_margin_usdt=config.MAX_MARGIN_USDT,
-        max_margin_trades=config.MAX_MARGIN_TRADES,
-        max_margin_pct=config.MAX_MARGIN_PCT,
-    )
-
-    # Connection test
-    try:
-        balance = client.get_balance("USDT")
-        logger.info(f"Connection OK | Available capital: {float(balance.get('available', 0)):.2f} USDT")
-    except Exception as e:
-        logger.error(f"Connection error: {e}")
-        logger.error("Check your API keys in the .env file.")
-        sys.exit(1)
-
-    logger.info(f"Bot running – {len(config.SYMBOLS)} symbols, checking every {config.LOOP_INTERVAL_SECONDS}s...")
-    logger.info("Press CTRL+C to stop\n")
-
     stop_event = threading.Event()
     threads = []
 
-    risk_manager_fib = RiskManager(
-        position_margin_pct=config.POSITION_MARGIN_PCT,
-        risk_per_trade=config.RISK_PER_TRADE,
-        stop_loss_pct=config.FIB_STOP_LOSS_PCT,
-        take_profit_pct=config.FIB_TAKE_PROFIT_PCT,
-        leverage=config.LEVERAGE,
-        max_margin_usdt=config.MAX_MARGIN_USDT,
-        max_margin_trades=config.MAX_MARGIN_TRADES,
-        max_margin_pct=config.MAX_MARGIN_PCT,
-    )
-
-    # Shared risk manager map used by the Agent Scanner
-    risk_managers = {
-        "trend":  risk_manager_trend,
-        "scalp":  risk_manager_scalp,
-        "sniper": risk_manager_fib,
-        "lsob":   risk_manager_fib,
-        "fvg":    risk_manager_fib,   # structural SL — same sizing as SNIPER/LSOB
-    }
-
-    # Start the global Agent Scanner (handles all AUTO symbols centrally)
-    scanner_thread = threading.Thread(
-        target=agent_scanner_loop,
-        args=(client, risk_managers, stop_event),
-        name="AgentScanner",
-        daemon=True,
-    )
-    threads.append(scanner_thread)
-    scanner_thread.start()
-
-    # Start the AI Trade Analyst (analyzes performance and auto-adjusts parameters)
+    # AI Trade Analyst — reads DB + calls AI APIs, no Bitunix client needed
     analyst_thread = threading.Thread(
         target=trade_analyst.run_analysis_loop,
         args=(stop_event,),
@@ -656,7 +590,7 @@ def main():
     threads.append(analyst_thread)
     analyst_thread.start()
 
-    # Start the User Manager (starts/stops trading instances for registered users)
+    # User Manager — polls DB every 60s, starts/stops per-user trading instances
     user_mgr_thread = threading.Thread(
         target=user_manager_loop,
         args=(stop_event,),
@@ -666,24 +600,43 @@ def main():
     threads.append(user_mgr_thread)
     user_mgr_thread.start()
 
-    # Start per-symbol threads for non-AUTO strategies
-    # (AUTO symbols are skipped inside symbol_loop; the scanner handles them)
-    for symbol, strategy in zip(config.SYMBOLS, config.STRATEGIES):
-        if strategy == "scalp":
-            rm = risk_manager_scalp
-        elif strategy in ("fib", "sniper"):
-            rm = risk_manager_fib
-        else:
-            rm = risk_manager_trend
-        t = threading.Thread(
-            target=symbol_loop,
-            args=(symbol, strategy, client, rm, stop_event),
-            name=symbol,
-            daemon=True,
-        )
-        threads.append(t)
-        t.start()
-        time.sleep(1)  # Stagger starts slightly to avoid API burst
+    # Legacy single-user mode: if global API keys are set in .env, also start
+    # a global bot instance (backwards-compatible with single-user deployments).
+    if config.API_KEY and config.SECRET_KEY:
+        client = BitunixClient(config.API_KEY, config.SECRET_KEY)
+        try:
+            balance = client.get_balance("USDT")
+            logger.info(f"Global API OK | Available: {float(balance.get('available', 0)):.2f} USDT")
+        except Exception as e:
+            logger.warning(f"Global API keys invalid ({e}) — skipping global bot instance.")
+            client = None
+
+        if client:
+            risk_managers = _make_risk_managers()
+            scanner_thread = threading.Thread(
+                target=agent_scanner_loop,
+                args=(client, risk_managers, stop_event),
+                name="AgentScanner",
+                daemon=True,
+            )
+            threads.append(scanner_thread)
+            scanner_thread.start()
+
+            for symbol, strategy in zip(config.SYMBOLS, config.STRATEGIES):
+                rm = risk_managers.get(strategy, risk_managers["trend"])
+                t = threading.Thread(
+                    target=symbol_loop,
+                    args=(symbol, strategy, client, rm, stop_event),
+                    name=symbol,
+                    daemon=True,
+                )
+                threads.append(t)
+                t.start()
+                time.sleep(1)
+    else:
+        logger.info("Multi-user mode — trading instances started per registered user via UserManager.")
+
+    logger.info(f"Bot running – press CTRL+C to stop.")
 
     try:
         while True:
