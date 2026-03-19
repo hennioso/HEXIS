@@ -233,6 +233,8 @@ def agent_scanner_loop(
     _cooldown_until: dict[str, float] = {}   # sym → unix timestamp when cooldown expires
     _prev_had_position: dict[str, bool] = {sym: False for sym in config.SYMBOLS}
 
+    _consecutive_errors = 0   # suppress repeated identical error spam
+
     while not stop_event.is_set():
         try:
             # ---- 1. Determine which symbols are currently in AUTO mode ----
@@ -420,8 +422,18 @@ def agent_scanner_loop(
                         f"but signal no longer active — skipping."
                     )
 
+            _consecutive_errors = 0  # reset on successful tick
+
         except Exception as e:
-            log.error(f"Agent scanner error: {e}", exc_info=True)
+            _consecutive_errors += 1
+            if _consecutive_errors == 1:
+                log.error(f"Agent scanner error: {e}", exc_info=True)
+            elif _consecutive_errors % 10 == 0:
+                log.warning(f"Agent scanner still failing ({_consecutive_errors}x): {e}")
+            # Exponential backoff: 15s → 30s → 60s → 120s (cap)
+            backoff = min(config.LOOP_INTERVAL_SECONDS * (2 ** min(_consecutive_errors - 1, 3)), 120)
+            stop_event.wait(backoff)
+            continue
 
         stop_event.wait(config.LOOP_INTERVAL_SECONDS)
 
