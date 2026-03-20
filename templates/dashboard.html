@@ -1709,8 +1709,11 @@ document.getElementById('settings-modal').addEventListener('click', function(e) 
 
     const slice  = filtered.slice(_historyPage * _PAGE_SIZE, (_historyPage + 1) * _PAGE_SIZE);
     const offset = total - _historyPage * _PAGE_SIZE;
+    _closedTradesMap = {};
+    filtered.forEach(t => { _closedTradesMap[t.trade_id] = t; });
+
     tbody.innerHTML = slice.map((t, i) => `
-      <tr>
+      <tr class="clickable-row" onclick="openHistoryModal('${t.trade_id}')" style="cursor:pointer">
         <td style="color:var(--muted)">${offset - i}</td>
         <td style="color:var(--muted);font-size:12px">${fmtDate(t.entry_time)}</td>
         <td><span class="sym-badge sym-${t.symbol.replace('USDT','')}">${t.symbol.replace('USDT','')}</span></td>
@@ -2020,6 +2023,7 @@ document.getElementById('settings-modal').addEventListener('click', function(e) 
 
   // ---- Trade Detail Modal ----
   let _openTradesMap = {};
+  let _closedTradesMap = {};
 
   function openTradeModal(tradeId) {
     const t = _openTradesMap[tradeId];
@@ -2210,6 +2214,113 @@ document.getElementById('settings-modal').addEventListener('click', function(e) 
 
     document.getElementById('modal-body').innerHTML = html;
     document.getElementById('trade-modal').classList.add('show');
+  }
+
+
+  function openHistoryModal(tradeId) {
+    const t = _closedTradesMap[tradeId];
+    if (!t) return;
+
+    const sym      = t.symbol.replace("USDT", "");
+    const dir      = t.direction.toUpperCase();
+    const strategy = (t.strategy || "trend").toUpperCase();
+    const entry    = parseFloat(t.entry_price);
+    const exitP    = t.exit_price ? parseFloat(t.exit_price) : null;
+    const dirMult  = dir === "LONG" ? 1 : -1;
+
+    document.getElementById("modal-title").innerHTML =
+      `<span class="sym-badge sym-${sym}">${sym}</span>` +
+      `<span class="dir-badge dir-${t.direction}">${dir}</span>` +
+      `<span class="strat-badge strat-${strategy.toLowerCase()}">${strategy}</span>` +
+      ` ${statusBadge(t.status)}`;
+
+    let html = "";
+
+    // Price
+    const pricePct = exitP ? ((exitP - entry) / entry * 100 * dirMult) : null;
+    const pctCol   = pricePct !== null ? (pricePct >= 0 ? "var(--green)" : "var(--red)") : "";
+    const pctStr   = pricePct !== null
+      ? `<span style="font-size:11px;font-weight:400;color:${pctCol}">${pricePct >= 0 ? "+" : ""}${pricePct.toFixed(2)}%</span>`
+      : "";
+    html += `<div class="modal-section">
+      <div class="modal-section-label">Price</div>
+      <div class="modal-row"><span class="modal-row-label">Entry</span><span class="modal-row-value">${fmtPrice(entry)}</span></div>
+      <div class="modal-row"><span class="modal-row-label">Exit</span><span class="modal-row-value">${exitP ? fmtPrice(exitP) : "—"} ${pctStr}</span></div>
+    </div>`;
+
+    // Duration
+    const entryDt = t.entry_time ? new Date(t.entry_time.endsWith("Z") ? t.entry_time : t.entry_time + "Z") : null;
+    const exitDt  = t.exit_time  ? new Date(t.exit_time.endsWith("Z")  ? t.exit_time  : t.exit_time  + "Z") : null;
+    let durStr = "—";
+    if (entryDt && exitDt) {
+      const mins = Math.round((exitDt - entryDt) / 60000);
+      if (mins < 60) durStr = `${mins}m`;
+      else if (mins < 1440) durStr = `${Math.floor(mins/60)}h ${mins%60}m`;
+      else durStr = `${Math.floor(mins/1440)}d ${Math.floor((mins%1440)/60)}h`;
+    }
+    html += `<div class="modal-section">
+      <div class="modal-section-label">Position</div>
+      <div class="modal-row"><span class="modal-row-label">Qty</span><span class="modal-row-value">${fmt(t.qty, 4)}</span></div>
+      ${t.leverage ? `<div class="modal-row"><span class="modal-row-label">Leverage</span><span class="modal-row-value">${t.leverage}x</span></div>` : ""}
+      ${t.margin_usdt ? `<div class="modal-row"><span class="modal-row-label">Margin</span><span class="modal-row-value">${parseFloat(t.margin_usdt).toFixed(2)} USDT</span></div>` : ""}
+      <div class="modal-row"><span class="modal-row-label">Opened</span><span class="modal-row-value" style="color:var(--muted)">${entryDt ? fmtDate(t.entry_time) : "—"}</span></div>
+      <div class="modal-row"><span class="modal-row-label">Closed</span><span class="modal-row-value" style="color:var(--muted)">${exitDt ? fmtDate(t.exit_time) : "—"}</span></div>
+      <div class="modal-row"><span class="modal-row-label">Duration</span><span class="modal-row-value">${durStr}</span></div>
+    </div>`;
+
+    // Levels
+    html += `<div class="modal-section"><div class="modal-section-label">Levels</div>`;
+    if (t.strategy === "sniper" && t.tp1_price) {
+      [{label:"TP1",pct:"20%",price:parseFloat(t.tp1_price),hit:!!t.tp1_hit},
+       {label:"TP2",pct:"50%",price:parseFloat(t.tp2_price),hit:!!t.tp2_hit},
+       {label:"TP3",pct:"25%",price:parseFloat(t.tp3_price),hit:!!t.tp3_hit}
+      ].forEach(tp => {
+        const distPct  = Math.abs(tp.price - entry) / entry * 100;
+        const distUsdt = Math.abs(tp.price - entry) * parseFloat(t.qty);
+        const infoStr  = tp.hit
+          ? `<span style="color:var(--green)">+${distUsdt.toFixed(2)} USDT (${distPct.toFixed(2)}%)</span>`
+          : `<span style="color:var(--muted)">${distPct.toFixed(2)}% away — not hit</span>`;
+        html += `<div class="tp-level${tp.hit ? " tp-hit" : ""}">
+          <span class="tp-icon">${tp.hit ? "✅" : "⬜"}</span>
+          <div class="tp-info"><span class="tp-label">${tp.label}</span><span class="tp-pct"> · ${tp.pct}</span><br><span class="tp-price">${fmtPrice(tp.price)}</span></div>
+          <div class="tp-dist">${infoStr}</div>
+        </div>`;
+      });
+    } else if (t.tp_price) {
+      const tpP  = parseFloat(t.tp_price);
+      const tpHit = t.status === "tp_hit";
+      const dPct  = Math.abs(tpP - entry) / entry * 100;
+      html += `<div class="tp-level${tpHit ? " tp-hit" : ""}">
+        <span class="tp-icon">${tpHit ? "✅" : "⬜"}</span>
+        <div class="tp-info"><span class="tp-label">TP</span><br><span class="tp-price">${fmtPrice(tpP)}</span></div>
+        <div class="tp-dist">${tpHit ? `<span style="color:var(--green)">Hit · ${dPct.toFixed(2)}%</span>` : `<span style="color:var(--muted)">Not hit</span>`}</div>
+      </div>`;
+    }
+    if (t.sl_price) {
+      const slP  = parseFloat(t.sl_price);
+      const slHit = t.status === "sl_hit";
+      const dPct  = Math.abs(slP - entry) / entry * 100;
+      const beLabel = t.be_moved ? " <span class=\"be-badge\">BE</span>" : "";
+      html += `<div class="sl-level">
+        <span class="tp-icon">${slHit ? "❌" : "🛡"}</span>
+        <div class="tp-info"><span class="tp-label">SL${beLabel}</span><br><span class="tp-price" style="color:var(--red)">${fmtPrice(slP)}</span></div>
+        <div class="tp-dist">${slHit ? `<span style="color:var(--red)">Hit · ${dPct.toFixed(2)}%</span>` : `<span style="color:var(--muted)">Not hit</span>`}</div>
+      </div>`;
+    }
+    html += "</div>";
+
+    // PnL
+    const realPnl = t.pnl_usdt != null ? parseFloat(t.pnl_usdt) : null;
+    const partPnl = t.partial_pnl_usdt ? parseFloat(t.partial_pnl_usdt) : 0;
+    html += `<div class="modal-section">
+      <div class="modal-section-label">PnL${t.trail_activated ? " · <span style=\"font-size:11px;color:var(--muted)\">Trailing was active</span>" : ""}</div>
+      ${partPnl > 0 ? `<div class="modal-row"><span class="modal-row-label">Partial TPs taken</span><span class="modal-row-value" style="color:var(--green)">+${partPnl.toFixed(2)} USDT</span></div>` : ""}
+      <div class="modal-row"><span class="modal-row-label">Final PnL</span><span class="modal-row-value">${realPnl !== null ? fmtPnl(realPnl) : "—"}</span></div>
+      ${realPnl !== null && partPnl > 0 ? `<div class="modal-row"><span class="modal-row-label">Total</span><span class="modal-row-value">${fmtPnl(realPnl + partPnl)}</span></div>` : ""}
+    </div>`;
+
+    document.getElementById("modal-body").innerHTML = html;
+    document.getElementById("trade-modal").classList.add("show");
   }
 
   function closeTradeModal() {
