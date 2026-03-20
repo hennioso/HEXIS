@@ -1262,6 +1262,32 @@ document.getElementById('settings-modal').addEventListener('click', function(e) 
 
       </div>
     </div>
+    <div class="sym-card" data-symbol="XAUTUSDT">
+      <div class="sym-name">XAUT/USDT</div>
+      <div class="sym-price" id="sym-price-XAUTUSDT">—</div>
+      <div class="sym-chg"  id="sym-chg-XAUTUSDT">—</div>
+      <div class="strat-btns" id="strat-XAUTUSDT">
+        <button class="strat-btn" data-strat="trend"   onclick="setStrategy('XAUTUSDT','trend',event)">TREND</button>
+        <button class="strat-btn" data-strat="scalp"   onclick="setStrategy('XAUTUSDT','scalp',event)">SCALP</button>
+        <button class="strat-btn" data-strat="sniper"  onclick="setStrategy('XAUTUSDT','sniper',event)">SNIPER</button>
+        <button class="strat-btn" data-strat="lsob"    onclick="setStrategy('XAUTUSDT','lsob',event)">LSOB</button>
+        <button class="strat-btn" data-strat="fvg"     onclick="setStrategy('XAUTUSDT','fvg',event)">FVG</button>
+        <button class="strat-btn" data-strat="auto"    onclick="setStrategy('XAUTUSDT','auto',event)">AUTO</button>
+      </div>
+    </div>
+    <div class="sym-card" data-symbol="XAGUSDT">
+      <div class="sym-name">XAG/USDT</div>
+      <div class="sym-price" id="sym-price-XAGUSDT">—</div>
+      <div class="sym-chg"  id="sym-chg-XAGUSDT">—</div>
+      <div class="strat-btns" id="strat-XAGUSDT">
+        <button class="strat-btn" data-strat="trend"   onclick="setStrategy('XAGUSDT','trend',event)">TREND</button>
+        <button class="strat-btn" data-strat="scalp"   onclick="setStrategy('XAGUSDT','scalp',event)">SCALP</button>
+        <button class="strat-btn" data-strat="sniper"  onclick="setStrategy('XAGUSDT','sniper',event)">SNIPER</button>
+        <button class="strat-btn" data-strat="lsob"    onclick="setStrategy('XAGUSDT','lsob',event)">LSOB</button>
+        <button class="strat-btn" data-strat="fvg"     onclick="setStrategy('XAGUSDT','fvg',event)">FVG</button>
+        <button class="strat-btn" data-strat="auto"    onclick="setStrategy('XAGUSDT','auto',event)">AUTO</button>
+      </div>
+    </div>
   </div>
 
 
@@ -1474,6 +1500,8 @@ document.getElementById('settings-modal').addEventListener('click', function(e) 
           <option value="BNBUSDT">BNBUSDT</option>
           <option value="HYPEUSDT">HYPEUSDT</option>
           <option value="ADAUSDT">ADAUSDT</option>
+          <option value="XAUTUSDT">XAUTUSDT</option>
+          <option value="XAGUSDT">XAGUSDT</option>
         </select>
       </div>
       <div class="backtest-field">
@@ -2074,7 +2102,7 @@ document.getElementById('settings-modal').addEventListener('click', function(e) 
 
   // ---- Symbol Strip ----
   let currentSymbol = 'BTCUSDT';
-  const SYMBOL_LABELS = { BTCUSDT: 'BTC/USDT', ETHUSDT: 'ETH/USDT', SOLUSDT: 'SOL/USDT', XRPUSDT: 'XRP/USDT', BNBUSDT: 'BNB/USDT', HYPEUSDT: 'HYPE/USDT', ADAUSDT: 'ADA/USDT' };
+  const SYMBOL_LABELS = { BTCUSDT: 'BTC/USDT', ETHUSDT: 'ETH/USDT', SOLUSDT: 'SOL/USDT', XRPUSDT: 'XRP/USDT', BNBUSDT: 'BNB/USDT', HYPEUSDT: 'HYPE/USDT', ADAUSDT: 'ADA/USDT', XAUTUSDT: 'XAUT/USDT', XAGUSDT: 'XAG/USDT' };
 
   async function loadPrices() {
     try {

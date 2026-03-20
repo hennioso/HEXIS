@@ -16,7 +16,7 @@ API_KEY    = os.getenv("BITUNIX_API_KEY",    "")
 SECRET_KEY = os.getenv("BITUNIX_SECRET_KEY", "")
 
 # ---- Trading Symbols -------------------------------------------------------
-SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT", "HYPEUSDT", "ADAUSDT"]
+SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT", "HYPEUSDT", "ADAUSDT", "XAUTUSDT", "XAGUSDT"]
 SYMBOL = SYMBOLS[0]  # Fallback for single-symbol access (e.g. dashboard default)
 
 # ---- Timeframes ------------------------------------------------------------
@@ -50,7 +50,7 @@ MAX_MARGIN_USDT = float(os.getenv("MAX_MARGIN_USDT", "25.0"))
 # 'trend' = RSI + EMA Crossover (multi-timeframe, trend-following)
 # 'scalp' = Bollinger Bands + RSI(7) + Volume (mean-reversion, tighter SL/TP)
 # Configurable per symbol – same order as SYMBOLS
-STRATEGIES = ["auto", "auto", "auto", "auto", "auto", "auto", "auto"]  # Agent Mode default – strategy selector picks best per symbol
+STRATEGIES = ["auto", "auto", "auto", "auto", "auto", "auto", "auto", "auto", "auto"]  # Agent Mode default – strategy selector picks best per symbol
 
 # Scalping-specific parameters (override SL/TP for scalp symbols)
 SCALP_STOP_LOSS_PCT    = float(os.getenv("SCALP_STOP_LOSS_PCT", "0.008"))   # 0.8%
