@@ -171,11 +171,13 @@ def create_payment():
             "networks": nets,
         })
 
-    # Generate a unique micro-amount so the payment can be matched without a memo
-    base   = config.CRYPTO_PRICE_USDT
-    amount = base
+    # Generate a unique micro-amount so the payment can be matched without a memo.
+    # Variation is capped at ±5% of base price (max 0.97 USDT) so it stays proportional.
+    base      = config.CRYPTO_PRICE_USDT
+    max_cents = max(1, min(97, int(base * 0.05 * 100)))  # 5% of base, 1–97 cents
+    amount    = base
     for _ in range(30):
-        candidate = round(base + random.randint(1, 97) / 100, 2)
+        candidate = round(base + random.randint(1, max_cents) / 100, 2)
         if not db.is_amount_pending(candidate):
             amount = candidate
             break
