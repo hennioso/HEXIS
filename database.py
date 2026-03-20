@@ -151,6 +151,14 @@ def init_db():
                 used       INTEGER NOT NULL DEFAULT 0
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_strategies (
+                user_id  INTEGER NOT NULL,
+                symbol   TEXT    NOT NULL,
+                strategy TEXT    NOT NULL DEFAULT 'trend',
+                PRIMARY KEY (user_id, symbol)
+            )
+        """)
         conn.commit()
         # Migrations for existing databases
         _add_column_if_missing(conn, "users", "telegram_chat_id",   "TEXT")
@@ -898,3 +906,35 @@ def get_all_crypto_payments() -> list[dict]:
             "SELECT * FROM crypto_payments ORDER BY confirmed_at DESC"
         ).fetchall()
         return [dict(r) for r in rows]
+
+def get_user_strategies(user_id: int) -> dict:
+    """Return {symbol: strategy} for the given user."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT symbol, strategy FROM user_strategies WHERE user_id = ?", (user_id,)
+        ).fetchall()
+        return {r["symbol"]: r["strategy"] for r in rows}
+
+
+def set_user_strategy(user_id: int, symbol: str, strategy: str) -> None:
+    """Upsert a strategy for a user/symbol pair."""
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO user_strategies (user_id, symbol, strategy) VALUES (?, ?, ?) "
+            "ON CONFLICT(user_id, symbol) DO UPDATE SET strategy = excluded.strategy",
+            (user_id, symbol, strategy)
+        )
+        conn.commit()
+
+
+def set_user_strategies_bulk(user_id: int, strategies: dict) -> None:
+    """Upsert multiple {symbol: strategy} entries at once."""
+    with _connect() as conn:
+        for symbol, strategy in strategies.items():
+            conn.execute(
+                "INSERT INTO user_strategies (user_id, symbol, strategy) VALUES (?, ?, ?) "
+                "ON CONFLICT(user_id, symbol) DO UPDATE SET strategy = excluded.strategy",
+                (user_id, symbol, strategy)
+            )
+        conn.commit()
+
