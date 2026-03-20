@@ -60,37 +60,40 @@ _SOL_MINTS = {
 # ── Chain fetchers ────────────────────────────────────────────────────────────
 
 def _fetch_trc20(wallet: str) -> list[dict]:
-    """Return normalised incoming transfers on Tron (USDT + USDC)."""
-    import time as _time
+    """Return normalised incoming transfers on Tron (USDT + USDC).
+    Uses a single request for all TRC20 transfers, then filters by known contracts.
+    """
+    known = {v.lower(): k for k, v in _TRX_CONTRACTS.items()}  # contract -> token name
     result = []
     headers = {}
     if config.TRONGRID_API_KEY:
         headers["TRON-PRO-API-KEY"] = config.TRONGRID_API_KEY
-    for i, (token, contract) in enumerate(_TRX_CONTRACTS.items()):
-        if i > 0:
-            _time.sleep(1.5)  # avoid back-to-back requests hitting rate limit
-        try:
-            r = requests.get(
-                f"https://api.trongrid.io/v1/accounts/{wallet}/transactions/trc20",
-                params={"limit": 50, "contract_address": contract, "only_to": "true"},
-                headers=headers, timeout=15,
-            )
-            if r.status_code == 429:
-                log.debug(f"TronGrid ({token}) rate limited — will retry next cycle.")
+    try:
+        r = requests.get(
+            f"https://api.trongrid.io/v1/accounts/{wallet}/transactions/trc20",
+            params={"limit": 50, "only_to": "true"},
+            headers=headers, timeout=15,
+        )
+        if r.status_code == 429:
+            log.debug("TronGrid rate limited — will retry next cycle.")
+            return []
+        r.raise_for_status()
+        for tx in r.json().get("data", []):
+            if tx.get("to", "").lower() != wallet.lower():
                 continue
-            r.raise_for_status()
-            for tx in r.json().get("data", []):
-                if tx.get("to", "").lower() != wallet.lower():
-                    continue
-                result.append({
-                    "txid":   tx["transaction_id"],
-                    "amount": int(tx.get("value", 0)) / 1_000_000,
-                    "token":  token,
-                    "from":   tx.get("from", ""),
-                    "chain":  "TRC20",
-                })
-        except Exception as exc:
-            log.debug(f"TronGrid ({token}) error: {exc}")
+            contract = tx.get("token_info", {}).get("address", "").lower()
+            token = known.get(contract)
+            if not token:
+                continue  # not USDT or USDC
+            result.append({
+                "txid":   tx["transaction_id"],
+                "amount": int(tx.get("value", 0)) / 1_000_000,
+                "token":  token,
+                "from":   tx.get("from", ""),
+                "chain":  "TRC20",
+            })
+    except Exception as exc:
+        log.debug(f"TronGrid error: {exc}")
     return result
 
 
@@ -286,7 +289,7 @@ def active_networks() -> list[dict]:
     return nets
 
 
-_TRC20_INTERVAL = 120   # TronGrid free tier: max ~1 req/2s → poll every 2 min
+_TRC20_INTERVAL = 300   # TronGrid free tier: 1 request per 5 min (was 2x per 2 min)
 _EVM_SOL_INTERVAL = 60  # Basescan/Etherscan/Helius: 60s is fine
 
 def watcher_loop(stop_event) -> None:
