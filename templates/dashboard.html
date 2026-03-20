@@ -2878,14 +2878,17 @@ async function adminLoadCodes() {
       : '<span style="color:var(--green)">Available</span>';
     const created = c.created_at ? c.created_at.slice(0,10) : '-';
     const resendBtn = (!c.used && c.email)
-      ? `<button onclick="adminResend('${c.code}','${c.email}')" style="font-size:11px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:2px 8px;cursor:pointer">Resend</button>`
+      ? `<button onclick="adminResend('${c.code}','${c.email}')" style="font-size:11px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:2px 8px;cursor:pointer;margin-right:4px">Resend</button>`
+      : '';
+    const deleteBtn = !c.used
+      ? `<button onclick="adminDeleteCode('${c.code}')" style="font-size:11px;background:none;border:1px solid rgba(248,81,73,0.4);color:#f85149;border-radius:4px;padding:2px 8px;cursor:pointer">Delete</button>`
       : '';
     return `<tr style="border-top:1px solid var(--border)">
       <td style="padding:10px 16px;font-family:monospace">${c.code}</td>
       <td style="padding:10px 16px;color:var(--muted)">${c.email||'-'}</td>
       <td style="padding:10px 16px">${status}</td>
       <td style="padding:10px 16px;color:var(--muted)">${created}</td>
-      <td style="padding:10px 16px">${resendBtn}</td>
+      <td style="padding:10px 16px">${resendBtn}${deleteBtn}</td>
     </tr>`;
   }).join('');
 }
@@ -2917,20 +2920,28 @@ async function adminLoadUsers() {
 
 async function adminGenerateCode() {
   const email = document.getElementById('admin-invite-email').value.trim();
-  const r = await fetch('/api/admin/invite', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({email})
-  });
-  const data = await r.json();
-  if (!data.ok) { alert('Error: ' + (data.error||'unknown')); return; }
-  document.getElementById('admin-invite-code-val').textContent = data.code;
-  document.getElementById('admin-invite-email-sent').textContent = data.email_sent
-    ? ('Email sent to ' + data.email)
-    : (data.email ? 'Email failed — copy code manually' : 'No email provided');
-  document.getElementById('admin-invite-result').style.display = '';
-  document.getElementById('admin-invite-email').value = '';
-  adminLoadCodes();
+  const btn = event.currentTarget;
+  btn.disabled = true; btn.textContent = 'Generating...';
+  try {
+    const r = await fetch('/api/admin/invite', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email})
+    });
+    const data = await r.json();
+    if (!data.ok) { showAdminToast('Fehler: ' + (data.error||'unknown'), 'error'); return; }
+    const sentMsg = data.email_sent
+      ? ('E-Mail verschickt an ' + data.email)
+      : (data.email ? '⚠ E-Mail fehlgeschlagen — Code manuell weitergeben' : 'Kein E-Mail angegeben');
+    document.getElementById('admin-invite-code-val').textContent = data.code;
+    document.getElementById('admin-invite-email-sent').textContent = sentMsg;
+    document.getElementById('admin-invite-result').style.display = '';
+    document.getElementById('admin-invite-email').value = '';
+    showAdminToast(data.email_sent ? ('✓ Code ' + data.code + ' — E-Mail verschickt') : ('✓ Code generiert: ' + data.code + ' — E-Mail fehlgeschlagen'), data.email_sent ? 'success' : 'warn');
+    adminLoadCodes();
+  } finally {
+    btn.disabled = false; btn.textContent = '+ Generate & Send';
+  }
 }
 
 async function adminResend(code, email) {
@@ -2968,6 +2979,35 @@ document.addEventListener('click', function(e) {
     }
   }).catch(()=>{});
 })();
+
+
+async function adminDeleteCode(code) {
+  if (!confirm('Code ' + code + ' wirklich löschen?')) return;
+  const r = await fetch('/api/admin/invite/delete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({code})
+  });
+  const data = await r.json();
+  if (data.ok) { showAdminToast('Code ' + code + ' gelöscht', 'success'); adminLoadCodes(); }
+  else { showAdminToast(data.error || 'Fehler beim Löschen', 'error'); }
+}
+
+function showAdminToast(msg, type) {
+  let t = document.getElementById('admin-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'admin-toast';
+    t.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;padding:12px 18px;border-radius:8px;font-size:13px;font-weight:500;max-width:360px;transition:opacity .3s;pointer-events:none';
+    document.body.appendChild(t);
+  }
+  const colors = {success:'background:#1a3a24;border:1px solid #3fb950;color:#3fb950', warn:'background:#2d2200;border:1px solid #f0883e;color:#f0883e', error:'background:#2d1518;border:1px solid #f85149;color:#f85149'};
+  t.style.cssText += ';' + (colors[type] || colors.success);
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._hide);
+  t._hide = setTimeout(() => { t.style.opacity = '0'; }, 3500);
+}
 
 </script>
 

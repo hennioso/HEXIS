@@ -160,6 +160,19 @@ def api_admin_invite_resend():
     sent = mailer.send_invite_code(email, code)
     return jsonify({"ok": True, "email_sent": sent})
 
+
+@app.route("/api/admin/invite/delete", methods=["POST"])
+def api_admin_invite_delete():
+    err = _require_admin()
+    if err:
+        return err
+    data = request.get_json(force=True) or {}
+    code = data.get("code", "").strip()
+    if not code:
+        return jsonify({"error": "code required"}), 400
+    deleted = db.delete_invite_code(code)
+    return jsonify({"ok": deleted, "error": None if deleted else "Code not found or already used"})
+
 # ── Crypto payment gateway ────────────────────────────────────────────────────
 
 @app.route("/checkout")

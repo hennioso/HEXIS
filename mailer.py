@@ -58,9 +58,8 @@ def send_invite_code(to_email: str, code: str) -> bool:
     """
 
     plain = (
-        'Reset your HEXIS password: ' + reset_url + chr(10) + chr(10) +
-        'Link expires in 30 minutes.' + chr(10) +
-        'If you did not request this, ignore this email.'
+        'Your HEXIS invite code: ' + code + chr(10) + chr(10) +
+        'Register at: ' + register_url
     )
     try:
         msg = MIMEMultipart("alternative")

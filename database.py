@@ -750,6 +750,13 @@ def disconnect_telegram(user_id: int):
         conn.commit()
 
 
+
+def delete_invite_code(code: str) -> bool:
+    """Delete an invite code. Returns True if a row was deleted."""
+    with _connect() as conn:
+        cur = conn.execute("DELETE FROM invite_codes WHERE code = ? AND used = 0", (code,))
+        return cur.rowcount > 0
+
 def get_all_invite_codes() -> list[dict]:
     with _connect() as conn:
         rows = conn.execute(
