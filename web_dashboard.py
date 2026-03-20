@@ -724,8 +724,9 @@ def api_balance():
 
 @app.route("/api/strategies")
 def api_strategies():
-    """Returns the current strategy for every symbol."""
-    return jsonify(strategy_state.load())
+    """Returns the current strategy for every symbol (per user)."""
+    uid = session.get("user_id")
+    return jsonify(strategy_state.load(uid))
 
 
 @app.route("/api/strategy", methods=["POST"])
@@ -738,7 +739,8 @@ def api_set_strategy():
     if not symbol or not strat:
         return jsonify({"error": "symbol and strategy required"}), 400
 
-    ok = strategy_state.set_strategy(symbol, strat)
+    uid = session.get("user_id")
+    ok = strategy_state.set_strategy(symbol, strat, uid)
     if not ok:
         return jsonify({"error": f"invalid strategy '{strat}'. Use: trend | scalp | sniper | lsob | fvg | auto"}), 400
 
@@ -760,7 +762,8 @@ def api_agent_mode():
     open_trades   = [t for t in db.get_all_trades(limit=500) if t["status"] == "open"]
     locked_symbols = {t["symbol"] for t in open_trades}
 
-    current = strategy_state.load()
+    uid = session.get("user_id")
+    current = strategy_state.load(uid)
     changed, skipped = [], []
 
     for symbol in config.SYMBOLS:
@@ -768,12 +771,12 @@ def api_agent_mode():
             skipped.append(symbol)
             continue
         if enable:
-            strategy_state.set_strategy(symbol, "auto")
+            strategy_state.set_strategy(symbol, "auto", uid)
             changed.append(symbol)
         else:
             # Only revert symbols that are currently on 'auto'
             if current.get(symbol) == "auto":
-                strategy_state.set_strategy(symbol, "sniper")
+                strategy_state.set_strategy(symbol, "sniper", uid)
                 changed.append(symbol)
 
     return jsonify({
