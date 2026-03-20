@@ -33,6 +33,9 @@ MIN_OB_PCT = 0.0005         # 0.05%
 # SL buffer beyond the sweep wick
 SL_BUFFER = 0.002           # 0.2%
 
+# Minimum Risk/Reward ratio — TP must be at least this multiple of SL distance
+MIN_CRV = 1.5
+
 # How many candles back to define the "prior" swing
 OB_LOOKBACK = 40
 
@@ -133,6 +136,11 @@ def check_lsob_signal(
                 if tp_price >= current_price or sl_price <= current_price:
                     continue
 
+                sl_dist = abs(sl_price - current_price)
+                tp_dist = abs(current_price - tp_price)
+                if sl_dist == 0 or tp_dist / sl_dist < MIN_CRV:
+                    continue  # CRV too low — skip this setup
+
                 return LSOBSignal(
                     direction="short",
                     price=current_price,
@@ -184,6 +192,11 @@ def check_lsob_signal(
                 # Sanity: TP above entry, SL below entry
                 if tp_price <= current_price or sl_price >= current_price:
                     continue
+
+                sl_dist = abs(current_price - sl_price)
+                tp_dist = abs(tp_price - current_price)
+                if sl_dist == 0 or tp_dist / sl_dist < MIN_CRV:
+                    continue  # CRV too low — skip this setup
 
                 return LSOBSignal(
                     direction="long",
