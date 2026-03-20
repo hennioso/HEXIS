@@ -347,6 +347,16 @@ def get_stats(user_id: int = None) -> dict:
         }
 
 
+
+def update_trade_entry_price(trade_id: str, entry_price: float):
+    """Update the stored entry price with the actual exchange fill price."""
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE trades SET entry_price=? WHERE trade_id=?",
+            (entry_price, trade_id)
+        )
+        conn.commit()
+
 def update_trade_qty(trade_id: str, qty: float):
     """Updates the qty of an open trade (e.g. after manual position sizing on exchange)."""
     with _connect() as conn:

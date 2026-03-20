@@ -153,6 +153,30 @@ class Trader:
             )
         self._current_trade_id = None
 
+    def _fetch_fill_price(self, order_id: str, fallback: float, retries: int = 3) -> float:
+        """Fetch the actual average fill price for a market order from exchange history."""
+        import time as _time
+        for attempt in range(retries):
+            _time.sleep(0.8)
+            try:
+                orders = self.client.get_order_history(self.symbol, limit=10)
+                for o in orders:
+                    oid = str(o.get("orderId", o.get("order_id", "")))
+                    if oid == str(order_id):
+                        avg = float(o.get("avgPrice", o.get("avg_price", 0)) or 0)
+                        if avg > 0:
+                            return avg
+                # Fallback: most recent OPEN-side filled order
+                for o in orders:
+                    avg = float(o.get("avgPrice", o.get("avg_price", 0)) or 0)
+                    ts = o.get("tradeSide", o.get("trade_side", ""))
+                    if avg > 0 and ts in ("OPEN", "open", ""):
+                        return avg
+            except Exception as e:
+                logger.debug(f"Fill price fetch attempt {attempt+1} failed: {e}")
+        logger.warning(f"Could not fetch fill price for order {order_id}, using signal {fallback:.4f}")
+        return fallback
+
     def _get_actual_exit_price(self, trade_id: str, trade: dict | None) -> float:
         """
         Attempts to find the actual execution price of the last CLOSE order
@@ -268,6 +292,9 @@ class Trader:
             )
             order_id = result.get("orderId", "")
             logger.info(f"Order placed: {result}")
+            fill_price = self._fetch_fill_price(order_id, trade_params.entry_price)
+            if abs(fill_price - trade_params.entry_price) > 0.001:
+                logger.info(f"Fill price {fill_price:.4f} (signal: {trade_params.entry_price:.4f})")
 
             # Save to database
             db.open_trade(
@@ -276,7 +303,7 @@ class Trader:
                 symbol=self.symbol,
                 direction=signal.direction,
                 qty=float(trade_params.qty),
-                entry_price=trade_params.entry_price,
+                entry_price=fill_price,
                 tp_price=float(trade_params.tp_price),
                 sl_price=float(trade_params.sl_price),
                 rsi_entry=signal.rsi_5m,
@@ -407,6 +434,9 @@ class Trader:
             )
             order_id = result.get("orderId", "")
             logger.info(f"SNIPER order placed: {result}")
+            fill_price = self._fetch_fill_price(order_id, entry_price)
+            if abs(fill_price - entry_price) > 0.001:
+                logger.info(f"SNIPER fill {fill_price:.4f} (signal: {entry_price:.4f})")
 
             db.open_trade(
                 trade_id=trade_id,
@@ -414,7 +444,7 @@ class Trader:
                 symbol=self.symbol,
                 direction=sniper.direction,
                 qty=float(qty),
-                entry_price=entry_price,
+                entry_price=fill_price,
                 tp_price=sniper.tp3_price,   # store TP3 as the final reference TP
                 sl_price=sniper.sl_price,
                 strategy="sniper",
@@ -546,6 +576,9 @@ class Trader:
             )
             order_id = result.get("orderId", "")
             logger.info(f"LSOB order placed: {result}")
+            fill_price = self._fetch_fill_price(order_id, entry_price)
+            if abs(fill_price - entry_price) > 0.001:
+                logger.info(f"LSOB fill {fill_price:.4f} (signal: {entry_price:.4f})")
 
             db.open_trade(
                 trade_id=trade_id,
@@ -553,7 +586,7 @@ class Trader:
                 symbol=self.symbol,
                 direction=lsob.direction,
                 qty=float(qty),
-                entry_price=entry_price,
+                entry_price=fill_price,
                 tp_price=lsob.tp_price,
                 sl_price=lsob.sl_price,
                 strategy="lsob",
@@ -693,6 +726,9 @@ class Trader:
             )
             order_id = result.get("orderId", "")
             logger.info(f"FVG order placed: {result}")
+            fill_price = self._fetch_fill_price(order_id, entry_price)
+            if abs(fill_price - entry_price) > 0.001:
+                logger.info(f"FVG fill {fill_price:.4f} (signal: {entry_price:.4f})")
 
             db.open_trade(
                 trade_id=trade_id,
@@ -700,7 +736,7 @@ class Trader:
                 symbol=self.symbol,
                 direction=fvg.direction,
                 qty=float(qty),
-                entry_price=entry_price,
+                entry_price=fill_price,
                 tp_price=fvg.tp_price,
                 sl_price=fvg.sl_price,
                 strategy="fvg",

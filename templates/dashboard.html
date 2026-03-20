@@ -2426,15 +2426,18 @@ document.getElementById('settings-modal').addEventListener('click', function(e) 
     }
 
     if (t.sl_price) {
-      const slPrice = parseFloat(t.sl_price);
-      let slDistStr = '';
-      {
-        const dist     = (slPrice - entry) * dirMult;
+      const slPrice  = parseFloat(t.sl_price);
+      const isBE     = t.be_moved && Math.abs(slPrice - entry) < 0.0001;
+      const beLabel  = t.be_moved ? '<span class="be-badge">BE</span>' : '';
+      let slDistStr  = '';
+      if (isBE) {
+        slDistStr = `<span style="color:var(--muted)">Break Even<br>(0.00%)</span>`;
+      } else {
+        const dist     = (slPrice - entry) * dirMult;   // negative = loss for this direction
         const distPct  = Math.abs(slPrice - entry) / entry * 100;
-        const distUsdt = dist * qtyRemaining;
-        slDistStr = `<span style="color:var(--red)">${distUsdt.toFixed(2)} USDT<br>(${distPct.toFixed(2)}%)</span>`;
+        const distUsdt = Math.abs(dist * qtyRemaining); // always show as positive loss amount
+        slDistStr = `<span style="color:var(--red)">-${distUsdt.toFixed(2)} USDT<br>(${distPct.toFixed(2)}%)</span>`;
       }
-      const beLabel = t.be_moved ? '<span class="be-badge">BE</span>' : '';
       html += `<div class="sl-level">
         <span class="tp-icon">🛡</span>
         <div class="tp-info">
@@ -2448,7 +2451,13 @@ document.getElementById('settings-modal').addEventListener('click', function(e) 
     html += `</div>`;
 
     // --- PnL section ---
-    const upnl       = t.unrealized_pnl != null ? parseFloat(t.unrealized_pnl) : null;
+    // Calculate live unrealized PnL from current price (more accurate than stale DB value)
+    let upnl;
+    if (livePrice && qtyRemaining > 0) {
+      upnl = (livePrice - entry) * dirMult * qtyRemaining;
+    } else {
+      upnl = t.unrealized_pnl != null ? parseFloat(t.unrealized_pnl) : null;
+    }
     const partialPnl = t.partial_pnl_usdt ? parseFloat(t.partial_pnl_usdt) : 0;
     const totalEst   = upnl !== null ? upnl + partialPnl : null;
     html += `<div class="modal-section">
