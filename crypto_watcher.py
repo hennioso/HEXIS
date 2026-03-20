@@ -224,10 +224,10 @@ def _process_transfer(tx: dict) -> None:
         )
 
 
-def check_payments() -> None:
+def check_payments(skip_trc20: bool = False) -> None:
     transfers: list[dict] = []
 
-    if config.CRYPTO_WALLET_TRX:
+    if config.CRYPTO_WALLET_TRX and not skip_trc20:
         transfers += _fetch_trc20(config.CRYPTO_WALLET_TRX)
 
     if config.CRYPTO_WALLET_EVM:
@@ -280,6 +280,9 @@ def active_networks() -> list[dict]:
     return nets
 
 
+_TRC20_INTERVAL = 120   # TronGrid free tier: max ~1 req/2s → poll every 2 min
+_EVM_SOL_INTERVAL = 60  # Basescan/Etherscan/Helius: 60s is fine
+
 def watcher_loop(stop_event) -> None:
     nets = active_networks()
     if not nets:
@@ -287,9 +290,16 @@ def watcher_loop(stop_event) -> None:
         return
     names = ", ".join(n["name"] for n in nets)
     log.info(f"Crypto watcher started — monitoring: {names}")
+    _last_trc20 = 0.0
+    import time as _time
     while not stop_event.is_set():
         try:
-            check_payments()
+            now = _time.time()
+            # Only fetch TRC20 every 2 minutes to stay within free rate limit
+            skip_trc20 = (now - _last_trc20) < _TRC20_INTERVAL
+            check_payments(skip_trc20=skip_trc20)
+            if not skip_trc20:
+                _last_trc20 = now
         except Exception as exc:
             log.error(f"Unexpected watcher error: {exc}", exc_info=True)
-        stop_event.wait(60)
+        stop_event.wait(_EVM_SOL_INTERVAL)

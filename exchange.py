@@ -336,3 +336,9 @@ class BitunixClient:
         if isinstance(result, list):
             return result
         return result.get("orderList", [])
+
+    def get_mark_price(self, symbol: str) -> dict:
+        """Fetch current mark price for a symbol."""
+        params = {"symbol": symbol}
+        data = self._get("/api/v1/futures/market/mark_price", params=params)
+        return data.get("data", {})

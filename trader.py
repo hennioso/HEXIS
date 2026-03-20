@@ -648,6 +648,26 @@ class Trader:
         sl_str   = str(round(fvg.sl_price, price_prec))
         tp_str   = str(round(fvg.tp_price, price_prec))
 
+        # Validate SL against current mark price before placing order
+        # (market may have moved since signal was generated)
+        try:
+            mark_data  = self.client.get_mark_price(self.symbol)
+            mark_price = float(mark_data.get("markPrice", entry_price))
+            if fvg.direction == "long" and fvg.sl_price >= mark_price:
+                logger.warning(
+                    f"FVG LONG aborted — SL {fvg.sl_price:.4f} >= mark {mark_price:.4f} "
+                    f"(market moved below FVG zone)"
+                )
+                return None
+            if fvg.direction == "short" and fvg.sl_price <= mark_price:
+                logger.warning(
+                    f"FVG SHORT aborted — SL {fvg.sl_price:.4f} <= mark {mark_price:.4f} "
+                    f"(market moved above FVG zone)"
+                )
+                return None
+        except Exception as e:
+            logger.debug(f"Mark price check skipped ({e}) — proceeding with order")
+
         logger.info(
             f"FVG OPEN | {fvg.direction.upper()} | "
             f"Qty: {qty} | Entry: {entry_price:.4f} | "
