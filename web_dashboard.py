@@ -138,6 +138,28 @@ def api_admin_invite():
     return jsonify({"ok": True, "code": code, "email": email, "email_sent": sent})
 
 
+
+@app.route("/api/admin/users")
+def api_admin_users():
+    err = _require_admin()
+    if err:
+        return err
+    return jsonify(db.get_all_users())
+
+
+@app.route("/api/admin/invite/resend", methods=["POST"])
+def api_admin_invite_resend():
+    err = _require_admin()
+    if err:
+        return err
+    data = request.get_json(force=True) or {}
+    code  = data.get("code", "").strip()
+    email = data.get("email", "").strip()
+    if not code or not email:
+        return jsonify({"error": "code and email required"}), 400
+    sent = mailer.send_invite_code(email, code)
+    return jsonify({"ok": True, "email_sent": sent})
+
 # ── Crypto payment gateway ────────────────────────────────────────────────────
 
 @app.route("/checkout")

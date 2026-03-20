@@ -1196,6 +1196,7 @@ document.getElementById('settings-modal').addEventListener('click', function(e) 
     <button class="tab-btn active" onclick="switchTab('overview',this)">Overview</button>
     <button class="tab-btn" onclick="switchTab('analytics',this)">Analytics</button>
     <button class="tab-btn" onclick="switchTab('backtest',this)">Backtest</button>
+    <button class="tab-btn" id="admin-tab-btn" style="display:none" onclick="switchTab('admin',this)">&#9881; Admin</button>
   </div>
 
   <!-- ═══ Tab: Overview ═══ -->
@@ -1433,7 +1434,86 @@ document.getElementById('settings-modal').addEventListener('click', function(e) 
 
     <div id="backtest-msg" style="padding:24px;color:var(--muted);text-align:center;font-size:13px"></div>
 
+
   </div><!-- /tab-backtest -->
+
+  <!-- ═══ Tab: Admin ═══ -->
+  <div class="tab-pane" id="tab-admin">
+    <div style="padding:20px 24px;max-width:860px;margin:0 auto">
+
+      <!-- Generate Invite Code -->
+      <div class="table-card" style="margin-bottom:20px">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-weight:600;font-size:14px">Generate Invite Code</span>
+        </div>
+        <div style="padding:16px 20px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          <div style="flex:1;min-width:220px">
+            <label style="display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Buyer Email</label>
+            <input id="admin-invite-email" type="email" placeholder="buyer@example.com"
+              style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 12px;color:var(--text);font-size:13px;box-sizing:border-box"/>
+          </div>
+          <button onclick="adminGenerateCode()"
+            style="padding:8px 18px;background:var(--green);color:#000;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">
+            + Generate &amp; Send
+          </button>
+        </div>
+        <div id="admin-invite-result" style="display:none;padding:0 20px 16px">
+          <div style="background:rgba(63,185,80,0.1);border:1px solid rgba(63,185,80,0.3);border-radius:6px;padding:10px 14px;font-size:13px">
+            Code: <strong id="admin-invite-code-val"></strong>
+            &nbsp;&middot;&nbsp; <span id="admin-invite-email-sent"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Invite Codes Table -->
+      <div class="table-card" style="margin-bottom:20px">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-weight:600;font-size:14px">Invite Codes</span>
+          <button onclick="adminLoadCodes()" style="font-size:11px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:3px 10px;cursor:pointer">Refresh</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em">
+                <th style="padding:10px 16px;text-align:left;font-weight:500">Code</th>
+                <th style="padding:10px 16px;text-align:left;font-weight:500">Email</th>
+                <th style="padding:10px 16px;text-align:left;font-weight:500">Status</th>
+                <th style="padding:10px 16px;text-align:left;font-weight:500">Created</th>
+                <th style="padding:10px 16px;text-align:left;font-weight:500">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="admin-codes-body">
+              <tr><td colspan="5" style="padding:20px;text-align:center;color:var(--muted)">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Users Table -->
+      <div class="table-card">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border)">
+          <span style="font-weight:600;font-size:14px">Registered Users</span>
+        </div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em">
+                <th style="padding:10px 16px;text-align:left;font-weight:500">ID</th>
+                <th style="padding:10px 16px;text-align:left;font-weight:500">Username</th>
+                <th style="padding:10px 16px;text-align:left;font-weight:500">Email</th>
+                <th style="padding:10px 16px;text-align:left;font-weight:500">Admin</th>
+                <th style="padding:10px 16px;text-align:left;font-weight:500">Telegram</th>
+              </tr>
+            </thead>
+            <tbody id="admin-users-body">
+              <tr><td colspan="5" style="padding:20px;text-align:center;color:var(--muted)">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div><!-- /tab-admin -->
 
 </main>
 
@@ -2709,6 +2789,100 @@ document.getElementById('settings-modal').addEventListener('click', function(e) 
       btn.disabled = false; btn.textContent = 'Add Trade';
     }
   }
+
+// ── Admin ────────────────────────────────────────────────────────────────────
+async function adminInit() {
+  try {
+    const r = await fetch('/api/admin/users');
+    if (r.ok) {
+      document.getElementById('admin-tab-btn').style.display = '';
+      adminLoadCodes();
+      adminLoadUsers();
+    }
+  } catch(e) {}
+}
+
+async function adminLoadCodes() {
+  const r = await fetch('/api/admin/invite');
+  const codes = await r.json();
+  const tbody = document.getElementById('admin-codes-body');
+  if (!codes.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--muted)">No codes yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = codes.map(c => {
+    const status = c.used
+      ? '<span style="color:var(--muted)">Used</span>'
+      : '<span style="color:var(--green)">Available</span>';
+    const created = c.created_at ? c.created_at.slice(0,10) : '-';
+    const resendBtn = (!c.used && c.email)
+      ? `<button onclick="adminResend('${c.code}','${c.email}')" style="font-size:11px;background:none;border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:2px 8px;cursor:pointer">Resend</button>`
+      : '';
+    return `<tr style="border-top:1px solid var(--border)">
+      <td style="padding:10px 16px;font-family:monospace">${c.code}</td>
+      <td style="padding:10px 16px;color:var(--muted)">${c.email||'-'}</td>
+      <td style="padding:10px 16px">${status}</td>
+      <td style="padding:10px 16px;color:var(--muted)">${created}</td>
+      <td style="padding:10px 16px">${resendBtn}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function adminLoadUsers() {
+  const r = await fetch('/api/admin/users');
+  const users = await r.json();
+  const tbody = document.getElementById('admin-users-body');
+  if (!users.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--muted)">No users</td></tr>';
+    return;
+  }
+  tbody.innerHTML = users.map(u => {
+    const admin = u.is_admin
+      ? '<span style="color:#f0883e">Admin</span>'
+      : '<span style="color:var(--muted)">User</span>';
+    const tg = u.telegram_chat_id
+      ? '<span style="color:var(--green)">Connected</span>'
+      : '<span style="color:var(--muted)">-</span>';
+    return `<tr style="border-top:1px solid var(--border)">
+      <td style="padding:10px 16px;color:var(--muted)">${u.id}</td>
+      <td style="padding:10px 16px;font-weight:600">${u.username}</td>
+      <td style="padding:10px 16px;color:var(--muted)">${u.email||'-'}</td>
+      <td style="padding:10px 16px">${admin}</td>
+      <td style="padding:10px 16px">${tg}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function adminGenerateCode() {
+  const email = document.getElementById('admin-invite-email').value.trim();
+  const r = await fetch('/api/admin/invite', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({email})
+  });
+  const data = await r.json();
+  if (!data.ok) { alert('Error: ' + (data.error||'unknown')); return; }
+  document.getElementById('admin-invite-code-val').textContent = data.code;
+  document.getElementById('admin-invite-email-sent').textContent = data.email_sent
+    ? ('Email sent to ' + data.email)
+    : (data.email ? 'Email failed — copy code manually' : 'No email provided');
+  document.getElementById('admin-invite-result').style.display = '';
+  document.getElementById('admin-invite-email').value = '';
+  adminLoadCodes();
+}
+
+async function adminResend(code, email) {
+  const r = await fetch('/api/admin/invite/resend', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({code, email})
+  });
+  const data = await r.json();
+  alert(data.email_sent ? ('Email resent to ' + email) : 'Failed to send email');
+}
+
+adminInit();
+
 </script>
 
 </body>

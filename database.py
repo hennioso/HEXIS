@@ -634,7 +634,7 @@ def get_user_by_id(user_id: int) -> Optional[dict]:
 
 def get_all_users() -> list[dict]:
     with _connect() as conn:
-        rows = conn.execute("SELECT id, username, email, is_admin, is_active, created_at FROM users ORDER BY id").fetchall()
+        rows = conn.execute("SELECT id, username, email, is_admin, is_active, created_at, telegram_chat_id FROM users ORDER BY id").fetchall()
         return [dict(r) for r in rows]
 
 
