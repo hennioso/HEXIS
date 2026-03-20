@@ -200,6 +200,35 @@ def payment_status():
     if confirmed:
         return jsonify({"status": "confirmed", "code": confirmed["invite_code"]})
 
+@app.route("/api/telegram/link_code", methods=["POST"])
+def api_telegram_link_code():
+    uid = _current_user_id()
+    if not uid:
+        return jsonify({"error": "Not logged in"}), 401
+    import secrets as _sec
+    code = _sec.token_hex(4).upper()
+    db.save_telegram_link_code(uid, code)
+    return jsonify({"code": code})
+
+
+@app.route("/api/telegram/status")
+def api_telegram_status():
+    uid = _current_user_id()
+    if not uid:
+        return jsonify({"connected": False})
+    chat_id = db.get_telegram_chat_id(uid)
+    return jsonify({"connected": bool(chat_id)})
+
+
+@app.route("/api/telegram/disconnect", methods=["POST"])
+def api_telegram_disconnect():
+    uid = _current_user_id()
+    if not uid:
+        return jsonify({"error": "Not logged in"}), 401
+    db.disconnect_telegram(uid)
+    return jsonify({"ok": True})
+
+
 @app.route("/forgot_password", methods=["GET", "POST"])
 def forgot_password():
     msg = None

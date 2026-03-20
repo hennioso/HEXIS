@@ -68,6 +68,17 @@ if _config.CRYPTO_WALLET_ADDRESS:
     _crypto_thread.start()
 
 
+# ── Telegram bot polling (connect/disconnect commands from users) ─────────────
+import telegram_bot as _tgbot
+_tgbot_stop = _threading.Event()
+_tgbot_thread = _threading.Thread(
+    target=_tgbot.poll_loop,
+    args=(_tgbot_stop,),
+    name="TelegramBot",
+    daemon=True,
+)
+_tgbot_thread.start()
+
 # ── Trading bot (runs in the main thread — blocks until CTRL+C) ──────────────
 from main import main   # noqa: E402
 main()

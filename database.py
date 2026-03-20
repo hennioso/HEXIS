@@ -152,6 +152,9 @@ def init_db():
             )
         """)
         conn.commit()
+        # Migrations for existing databases
+        _add_column_if_missing(conn, "users", "telegram_chat_id",   "TEXT")
+        _add_column_if_missing(conn, "users", "telegram_link_code", "TEXT")
 
 
 def _add_column_if_missing(conn, table: str, column: str, col_type: str):
@@ -711,6 +714,39 @@ def use_invite_code(code: str, user_id: int):
             "UPDATE invite_codes SET used = 1, used_by = ? WHERE code = ?",
             (user_id, code),
         )
+        conn.commit()
+
+
+def save_telegram_link_code(user_id: int, code: str):
+    with _connect() as conn:
+        conn.execute("UPDATE users SET telegram_link_code = ? WHERE id = ?", (code, user_id))
+        conn.commit()
+
+
+def get_user_by_telegram_link_code(code: str) -> Optional[dict]:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM users WHERE telegram_link_code = ?", (code,)).fetchone()
+        return dict(row) if row else None
+
+
+def save_telegram_chat_id(user_id: int, chat_id: str):
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE users SET telegram_chat_id = ?, telegram_link_code = NULL WHERE id = ?",
+            (chat_id, user_id),
+        )
+        conn.commit()
+
+
+def get_telegram_chat_id(user_id: int) -> Optional[str]:
+    with _connect() as conn:
+        row = conn.execute("SELECT telegram_chat_id FROM users WHERE id = ?", (user_id,)).fetchone()
+        return row["telegram_chat_id"] if row else None
+
+
+def disconnect_telegram(user_id: int):
+    with _connect() as conn:
+        conn.execute("UPDATE users SET telegram_chat_id = NULL WHERE id = ?", (user_id,))
         conn.commit()
 
 

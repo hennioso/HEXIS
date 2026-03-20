@@ -149,6 +149,7 @@ class Trader:
                 exit_p=exit_price,
                 pnl=pnl,
                 status=status,
+                user_id=self.user_id,
             )
         self._current_trade_id = None
 
@@ -291,6 +292,7 @@ class Trader:
                 tp=float(trade_params.tp_price),
                 sl=float(trade_params.sl_price),
                 qty=float(trade_params.qty),
+                user_id=self.user_id,
             )
             return result
         except Exception as e:
@@ -430,6 +432,7 @@ class Trader:
                 tp=sniper.tp3_price,
                 sl=sniper.sl_price,
                 qty=float(qty),
+                user_id=self.user_id,
             )
             return result
         except Exception as e:
@@ -569,6 +572,7 @@ class Trader:
                 tp=lsob.tp_price,
                 sl=lsob.sl_price,
                 qty=float(qty),
+                user_id=self.user_id,
             )
             return result
         except Exception as e:
@@ -715,6 +719,7 @@ class Trader:
                 tp=fvg.tp_price,
                 sl=fvg.sl_price,
                 qty=float(qty),
+                user_id=self.user_id,
             )
             return result
         except Exception as e:

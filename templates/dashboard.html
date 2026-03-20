@@ -919,13 +919,66 @@
       style="width:100%;padding:10px;background:#3fb950;color:#000;font-weight:700;font-size:14px;border:none;border-radius:8px;cursor:pointer">
       Save Settings
     </button>
+
+    <hr style="border:none;border-top:1px solid #30363d;margin:20px 0"/>
+
+    <div style="margin-bottom:6px">
+      <label style="display:block;font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">
+        Telegram Notifications
+      </label>
+      <div id="tg-connected-view" style="display:none">
+        <div style="background:rgba(63,185,80,.08);border:1px solid #3fb950;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;color:#3fb950">
+          ✅ Connected to Telegram
+        </div>
+        <button onclick="disconnectTelegram()"
+          style="width:100%;padding:8px;background:#21262d;color:#f85149;font-size:13px;border:1px solid #f85149;border-radius:8px;cursor:pointer">
+          Disconnect
+        </button>
+      </div>
+      <div id="tg-connect-view">
+        <p style="font-size:12px;color:#8b949e;margin-bottom:10px;line-height:1.5">
+          1. Open <b>@HexisAgentBot</b> on Telegram<br>
+          2. Click the button below to get your code<br>
+          3. Send <code>/connect YOUR_CODE</code> to the bot
+        </p>
+        <button onclick="generateTgCode()"
+          style="width:100%;padding:8px;background:#21262d;color:#58a6ff;font-size:13px;border:1px solid #30363d;border-radius:8px;cursor:pointer;margin-bottom:8px">
+          Generate Link Code
+        </button>
+        <div id="tg-code-box" style="display:none;background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:11px;color:#8b949e;margin-bottom:4px">Send this to @HexisAgentBot:</div>
+          <code style="font-size:18px;font-weight:700;letter-spacing:.1em;color:#58a6ff">/connect <span id="tg-code-value"></span></code>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
 <script>
+async function generateTgCode() {
+  const res = await fetch('/api/telegram/link_code', {method: 'POST'});
+  const data = await res.json();
+  if (data.code) {
+    document.getElementById('tg-code-value').textContent = data.code;
+    document.getElementById('tg-code-box').style.display = 'block';
+  }
+}
+
+async function disconnectTelegram() {
+  await fetch('/api/telegram/disconnect', {method: 'POST'});
+  document.getElementById('tg-connected-view').style.display = 'none';
+  document.getElementById('tg-connect-view').style.display = 'block';
+}
+
 function openSettings() {
   const modal = document.getElementById('settings-modal');
   modal.style.display = 'flex';
+  // Load Telegram status
+  fetch('/api/telegram/status').then(r => r.json()).then(d => {
+    document.getElementById('tg-connected-view').style.display = d.connected ? 'block' : 'none';
+    document.getElementById('tg-connect-view').style.display   = d.connected ? 'none'  : 'block';
+    document.getElementById('tg-code-box').style.display = 'none';
+  });
   // Load API key status
   fetch('/api/user/keys').then(r => r.json()).then(d => {
     const status = document.getElementById('settings-status');
