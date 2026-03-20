@@ -237,7 +237,7 @@ def payment_status():
 
 @app.route("/api/telegram/link_code", methods=["POST"])
 def api_telegram_link_code():
-    uid = _current_user_id()
+    uid = session.get("user_id")
     if not uid:
         return jsonify({"error": "Not logged in"}), 401
     import secrets as _sec
@@ -248,7 +248,7 @@ def api_telegram_link_code():
 
 @app.route("/api/telegram/status")
 def api_telegram_status():
-    uid = _current_user_id()
+    uid = session.get("user_id")
     if not uid:
         return jsonify({"connected": False})
     chat_id = db.get_telegram_chat_id(uid)
@@ -257,7 +257,7 @@ def api_telegram_status():
 
 @app.route("/api/telegram/disconnect", methods=["POST"])
 def api_telegram_disconnect():
-    uid = _current_user_id()
+    uid = session.get("user_id")
     if not uid:
         return jsonify({"error": "Not logged in"}), 401
     db.disconnect_telegram(uid)

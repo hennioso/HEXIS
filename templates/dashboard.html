@@ -1017,11 +1017,17 @@
 
 <script>
 async function generateTgCode() {
-  const res = await fetch('/api/telegram/link_code', {method: 'POST'});
-  const data = await res.json();
-  if (data.code) {
-    document.getElementById('tg-code-value').textContent = data.code;
-    document.getElementById('tg-code-box').style.display = 'block';
+  try {
+    const res = await fetch('/api/telegram/link_code', {method: 'POST'});
+    const data = await res.json();
+    if (data.code) {
+      document.getElementById('tg-code-value').textContent = data.code;
+      document.getElementById('tg-code-box').style.display = 'block';
+    } else {
+      alert('Fehler: ' + (data.error || 'Code konnte nicht generiert werden'));
+    }
+  } catch(e) {
+    alert('Netzwerkfehler: ' + e.message);
   }
 }
 
