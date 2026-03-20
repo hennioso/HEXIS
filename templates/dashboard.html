@@ -1318,7 +1318,6 @@ document.getElementById('settings-modal').addEventListener('click', function(e) 
     <div class="table-header">
       <h3>Active Trades</h3>
       <span class="badge" id="active-count">0 Open</span>
-      <button class="close-btn" style="margin-left:auto;background:var(--green);color:#000;font-weight:700;padding:5px 14px" onclick="openManualTradeModal()">+ Manual Trade</button>
     </div>
     <div class="table-wrap">
       <table>
@@ -2767,96 +2766,8 @@ document.getElementById('settings-modal').addEventListener('click', function(e) 
 </script>
 
 <!-- Manual Trade Modal -->
-<div class="modal-overlay" id="manual-trade-modal" onclick="if(event.target===this)closeManualTradeModal()">
-  <div class="modal-box">
-    <h3>+ Manual Trade</h3>
-    <div class="modal-grid">
-      <div>
-        <div class="modal-label">Symbol</div>
-        <input class="modal-input" id="mt-symbol" placeholder="BTCUSDT" style="text-transform:uppercase">
-      </div>
-      <div>
-        <div class="modal-label">Direction</div>
-        <select class="modal-input" id="mt-direction">
-          <option value="short">Short</option>
-          <option value="long">Long</option>
-        </select>
-      </div>
-      <div>
-        <div class="modal-label">Entry Price</div>
-        <input class="modal-input" id="mt-entry" type="number" step="any" placeholder="84250">
-      </div>
-      <div>
-        <div class="modal-label">Qty</div>
-        <input class="modal-input" id="mt-qty" type="number" step="any" placeholder="0.01">
-      </div>
-      <div>
-        <div class="modal-label">TP Price <span style="color:var(--muted)">(opt.)</span></div>
-        <input class="modal-input" id="mt-tp" type="number" step="any" placeholder="">
-      </div>
-      <div>
-        <div class="modal-label">SL Price <span style="color:var(--muted)">(opt.)</span></div>
-        <input class="modal-input" id="mt-sl" type="number" step="any" placeholder="">
-      </div>
-      <div>
-        <div class="modal-label">Strategy <span style="color:var(--muted)">(opt.)</span></div>
-        <input class="modal-input" id="mt-strategy" placeholder="manual">
-      </div>
-      <div>
-        <div class="modal-label">Note <span style="color:var(--muted)">(opt.)</span></div>
-        <input class="modal-input" id="mt-note" placeholder="">
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button class="modal-btn cancel" onclick="closeManualTradeModal()">Cancel</button>
-      <button class="modal-btn submit" id="mt-submit-btn" onclick="submitManualTrade()">Add Trade</button>
-    </div>
-  </div>
-</div>
 
 <script>
-  function openManualTradeModal() {
-    document.getElementById('manual-trade-modal').classList.add('show');
-    document.getElementById('mt-symbol').focus();
-  }
-  function closeManualTradeModal() {
-    document.getElementById('manual-trade-modal').classList.remove('show');
-  }
-  async function submitManualTrade() {
-    const btn = document.getElementById('mt-submit-btn');
-    const symbol   = document.getElementById('mt-symbol').value.trim().toUpperCase();
-    const direction= document.getElementById('mt-direction').value;
-    const entry    = document.getElementById('mt-entry').value;
-    const qty      = document.getElementById('mt-qty').value;
-    const tp       = document.getElementById('mt-tp').value;
-    const sl       = document.getElementById('mt-sl').value;
-    const strategy = document.getElementById('mt-strategy').value.trim() || 'manual';
-    const note     = document.getElementById('mt-note').value.trim();
-
-    if (!symbol || !entry || !qty) { alert('Symbol, Entry Price und Qty sind Pflichtfelder.'); return; }
-
-    btn.disabled = true; btn.textContent = 'Adding…';
-    try {
-      const res = await fetch('/api/trades/manual', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ symbol, direction, entry_price: entry, qty, tp_price: tp||null, sl_price: sl||null, strategy, note })
-      });
-      const d = await res.json();
-      if (d.ok) {
-        closeManualTradeModal();
-        // Reset form
-        ['mt-symbol','mt-entry','mt-qty','mt-tp','mt-sl','mt-note'].forEach(id => document.getElementById(id).value = '');
-        document.getElementById('mt-strategy').value = '';
-        await loadTrades();
-      } else {
-        alert('Fehler: ' + (d.error || 'Unbekannt'));
-      }
-    } finally {
-      btn.disabled = false; btn.textContent = 'Add Trade';
-    }
-  }
-
 // ── Admin ────────────────────────────────────────────────────────────────────
 async function adminInit() {
   try {
