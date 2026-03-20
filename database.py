@@ -142,6 +142,15 @@ def init_db():
                 confirmed_at TEXT NOT NULL
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL,
+                token      TEXT UNIQUE NOT NULL,
+                expires_at TEXT NOT NULL,
+                used       INTEGER NOT NULL DEFAULT 0
+            )
+        """)
         conn.commit()
 
 
@@ -714,6 +723,45 @@ def get_all_invite_codes() -> list[dict]:
 
 
 # ── Crypto payment management ─────────────────────────────────────────────────
+
+def create_reset_token(user_id: int, token: str, expires_minutes: int = 30):
+    from datetime import timedelta
+    expires = (datetime.utcnow() + timedelta(minutes=expires_minutes)).isoformat()
+    with _connect() as conn:
+        conn.execute("DELETE FROM password_reset_tokens WHERE user_id = ?", (user_id,))
+        conn.execute(
+            "INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)",
+            (user_id, token, expires),
+        )
+        conn.commit()
+
+
+def get_reset_token(token: str) -> Optional[dict]:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM password_reset_tokens WHERE token = ? AND used = 0", (token,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def consume_reset_token(token: str, new_pw_hash: str):
+    row = get_reset_token(token)
+    if not row:
+        return False
+    if row["expires_at"] < datetime.utcnow().isoformat():
+        return False
+    with _connect() as conn:
+        conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_pw_hash, row["user_id"]))
+        conn.execute("UPDATE password_reset_tokens SET used = 1 WHERE token = ?", (token,))
+        conn.commit()
+    return True
+
+
+def get_user_by_email(email: str) -> Optional[dict]:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM users WHERE email = ?", (email.lower(),)).fetchone()
+        return dict(row) if row else None
+
 
 def create_pending_payment(email: str, expected_amount: float, expires_hours: int = 24) -> int:
     """Store a pending crypto payment request with a unique expected amount."""

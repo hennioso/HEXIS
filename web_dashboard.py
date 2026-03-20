@@ -26,7 +26,7 @@ app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY") or secrets.token_hex(32)
 
 # ── Auth (DB-based) ──────────────────────────────────────────────────────────
-_PUBLIC_ROUTES = {"login", "register", "checkout", "create_payment", "payment_status", "static"}
+_PUBLIC_ROUTES = {"login", "register", "checkout", "create_payment", "payment_status", "forgot_password", "reset_password", "static"}
 
 @app.before_request
 def check_auth():
@@ -199,6 +199,48 @@ def payment_status():
     confirmed = db.get_confirmed_payment_by_email(email)
     if confirmed:
         return jsonify({"status": "confirmed", "code": confirmed["invite_code"]})
+
+@app.route("/forgot_password", methods=["GET", "POST"])
+def forgot_password():
+    msg = None
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        user  = db.get_user_by_email(email)
+        # Always show same message to prevent email enumeration
+        msg = "If an account with that email exists, a reset link has been sent."
+        if user:
+            import secrets as _secrets
+            token = _secrets.token_urlsafe(32)
+            db.create_reset_token(user["id"], token)
+            reset_url = f"{config.HEXIS_BASE_URL}/reset_password?token={token}"
+            mailer.send_password_reset(email, reset_url)
+    return render_template("forgot_password.html", msg=msg)
+
+
+@app.route("/reset_password", methods=["GET", "POST"])
+def reset_password():
+    token = request.args.get("token", "").strip()
+    error = None
+    if request.method == "POST":
+        token    = request.form.get("token", "").strip()
+        password = request.form.get("password", "")
+        confirm  = request.form.get("confirm", "")
+        if len(password) < 8:
+            error = "Password must be at least 8 characters."
+        elif password != confirm:
+            error = "Passwords do not match."
+        else:
+            from werkzeug.security import generate_password_hash
+            ok = db.consume_reset_token(token, generate_password_hash(password))
+            if ok:
+                return redirect(url_for("login") + "?reset=1")
+            error = "Reset link is invalid or has expired."
+    token_row = db.get_reset_token(token) if token else None
+    if not token_row and request.method == "GET":
+        error = "Reset link is invalid or has expired."
+    return render_template("reset_password.html", token=token, error=error)
+
+
 
     pending = db.get_pending_payment_by_email(email)
     if pending:
