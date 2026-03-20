@@ -170,3 +170,4 @@ ORDER_BOOK_MIN_USDT = float(os.getenv("ORDER_BOOK_MIN_USDT", "50000"))  # $50k
 DAILY_LOSS_LIMIT_USDT     = float(os.getenv("DAILY_LOSS_LIMIT_USDT",     "-30.0"))
 # Auto-disable a strategy after this many consecutive SL hits.
 MAX_CONSECUTIVE_LOSSES    = int(os.getenv("MAX_CONSECUTIVE_LOSSES",    "4"))
+HEXIS_BASE_URL = os.getenv("HEXIS_BASE_URL", "http://localhost:5000")

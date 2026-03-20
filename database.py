@@ -443,17 +443,28 @@ def mark_sniper_be_moved(trade_id: str, new_sl: float):
         conn.commit()
 
 
-def get_daily_pnl() -> list[dict]:
+def get_daily_pnl(user_id: int = None) -> list[dict]:
     """PnL per day for the chart (last 30 days)."""
     with _connect() as conn:
-        rows = conn.execute(
-            """SELECT DATE(exit_time) as day, SUM(pnl_usdt) as pnl
-               FROM trades
-               WHERE status != 'open' AND pnl_usdt IS NOT NULL
-                 AND exit_time >= DATE('now', '-30 days')
-               GROUP BY DATE(exit_time)
-               ORDER BY day ASC"""
-        ).fetchall()
+        if user_id is not None:
+            rows = conn.execute(
+                """SELECT DATE(exit_time) as day, SUM(pnl_usdt) as pnl
+                   FROM trades
+                   WHERE status != 'open' AND pnl_usdt IS NOT NULL
+                     AND exit_time >= DATE('now', '-30 days')
+                     AND user_id = ?
+                   GROUP BY DATE(exit_time)
+                   ORDER BY day ASC""", (user_id,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT DATE(exit_time) as day, SUM(pnl_usdt) as pnl
+                   FROM trades
+                   WHERE status != 'open' AND pnl_usdt IS NOT NULL
+                     AND exit_time >= DATE('now', '-30 days')
+                   GROUP BY DATE(exit_time)
+                   ORDER BY day ASC"""
+            ).fetchall()
         return [dict(r) for r in rows]
 
 
@@ -470,18 +481,27 @@ def get_today_pnl() -> float:
         return float(row[0])
 
 
-def get_equity_curve() -> list[dict]:
+def get_equity_curve(user_id: int = None) -> list[dict]:
     """
     Returns cumulative PnL over time — one row per closed trade,
     sorted by exit_time ascending. Used for the equity-curve chart.
     """
     with _connect() as conn:
-        rows = conn.execute(
-            """SELECT exit_time, pnl_usdt, symbol, direction, strategy
-               FROM trades
-               WHERE status != 'open' AND pnl_usdt IS NOT NULL
-               ORDER BY exit_time ASC"""
-        ).fetchall()
+        if user_id is not None:
+            rows = conn.execute(
+                """SELECT exit_time, pnl_usdt, symbol, direction, strategy
+                   FROM trades
+                   WHERE status != 'open' AND pnl_usdt IS NOT NULL
+                     AND user_id = ?
+                   ORDER BY exit_time ASC""", (user_id,)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT exit_time, pnl_usdt, symbol, direction, strategy
+                   FROM trades
+                   WHERE status != 'open' AND pnl_usdt IS NOT NULL
+                   ORDER BY exit_time ASC"""
+            ).fetchall()
         result = []
         running = 0.0
         for r in rows:

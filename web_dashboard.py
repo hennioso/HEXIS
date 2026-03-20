@@ -534,7 +534,7 @@ def api_trades():
 
 @app.route("/api/daily_pnl")
 def api_daily_pnl():
-    return jsonify(db.get_daily_pnl())
+    return jsonify(db.get_daily_pnl(user_id=_current_user_id()))
 
 
 
@@ -742,7 +742,7 @@ def api_close_position():
 @app.route("/api/equity")
 def api_equity():
     """Equity curve: cumulative PnL over all closed trades."""
-    return jsonify(db.get_equity_curve())
+    return jsonify(db.get_equity_curve(user_id=_current_user_id()))
 
 
 @app.route("/api/analytics")
