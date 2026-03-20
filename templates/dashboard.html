@@ -826,7 +826,43 @@
     .modal-btn.cancel { background:var(--border); color:var(--text); }
     .modal-btn.submit { background:var(--green); color:#000; }
     .modal-btn:disabled { opacity:.5; cursor:not-allowed; }
-  </style>
+  
+    /* ── User menu dropdown ── */
+    .user-menu { position: relative; }
+    .user-menu-btn {
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(139,148,158,0.08); border: 1px solid var(--border);
+      border-radius: 8px; padding: 6px 12px; color: var(--text);
+      font-size: 13px; font-weight: 500; cursor: pointer;
+      transition: background .15s;
+    }
+    .user-menu-btn:hover { background: rgba(139,148,158,0.16); }
+    .user-menu-avatar {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--green); color: #000;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; flex-shrink: 0;
+    }
+    .user-menu-name { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .user-menu-dropdown {
+      display: none; position: absolute; right: 0; top: calc(100% + 6px);
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      min-width: 200px; z-index: 500; padding: 6px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    }
+    .user-menu-dropdown.open { display: block; }
+    .user-menu-item {
+      display: flex; align-items: center; gap: 9px;
+      width: 100%; padding: 9px 12px; border-radius: 6px;
+      font-size: 13px; color: var(--text); text-decoration: none;
+      background: none; border: none; cursor: pointer; text-align: left;
+      transition: background .12s;
+    }
+    .user-menu-item:hover { background: rgba(139,148,158,0.1); }
+    .user-menu-item.bitunix-item { color: #f7a12a; }
+    .user-menu-item.logout-item { color: var(--red); }
+    .user-menu-divider { height: 1px; background: var(--border); margin: 4px 0; }
+</style>
 </head>
 <body>
 
@@ -871,13 +907,38 @@
     <span style="letter-spacing:.06em">HEXIS</span>
     <span class="dot" style="margin-left:10px"></span>
   </h1>
-  <div class="update-info" style="text-align:right;display:flex;align-items:center;gap:12px">
-    <a class="bitunix-btn" href="https://www.bitunix.com/register?inviteCode=vefzzy" target="_blank" rel="noopener">▶ Bitunix</a>
-    <button id="notify-btn" onclick="requestNotifications()" style="display:none;padding:4px 10px;font-size:11px;background:rgba(88,166,255,0.1);color:#58a6ff;border:1px solid rgba(88,166,255,0.3);border-radius:6px;cursor:pointer;white-space:nowrap">🔔</button>
-    <button id="sync-btn" onclick="syncClosed()" style="padding:4px 10px;font-size:11px;background:rgba(63,185,80,0.1);color:#3fb950;border:1px solid rgba(63,185,80,0.3);border-radius:6px;cursor:pointer;white-space:nowrap">⟳ Sync</button>
+  <div class="update-info" style="display:flex;align-items:center;gap:10px">
     <span class="refresh-info" id="last-update" style="white-space:nowrap">Loading...</span>
-    <button onclick="openSettings()" style="padding:4px 10px;font-size:11px;background:rgba(139,148,158,0.1);color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;white-space:nowrap" title="API Keys / Settings">⚙</button>
-    <a href="/logout" style="padding:4px 10px;font-size:11px;background:rgba(139,148,158,0.1);color:var(--muted);border:1px solid var(--border);border-radius:6px;cursor:pointer;text-decoration:none;white-space:nowrap">⎋</a>
+    <button id="sync-btn" onclick="syncClosed()" style="padding:5px 12px;font-size:12px;background:rgba(63,185,80,0.1);color:#3fb950;border:1px solid rgba(63,185,80,0.3);border-radius:6px;cursor:pointer;white-space:nowrap">⟳ Sync</button>
+    <button id="notify-btn" onclick="requestNotifications()" style="display:none;padding:5px 12px;font-size:12px;background:rgba(88,166,255,0.1);color:#58a6ff;border:1px solid rgba(88,166,255,0.3);border-radius:6px;cursor:pointer;white-space:nowrap">🔔 Benachrichtigungen</button>
+
+    <!-- User Menu -->
+    <div class="user-menu" id="user-menu">
+      <button class="user-menu-btn" onclick="toggleUserMenu()">
+        <span class="user-menu-avatar">H</span>
+        <span class="user-menu-name" id="header-username">Account</span>
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="flex-shrink:0"><path d="M2 4l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="user-menu-dropdown" id="user-menu-dropdown">
+        <a class="user-menu-item bitunix-item" href="https://www.bitunix.com/register?inviteCode=vefzzy" target="_blank" rel="noopener">
+          <span style="font-size:13px">▶</span> Bitunix öffnen
+        </a>
+        <div class="user-menu-divider"></div>
+        <button class="user-menu-item" onclick="closeUserMenu(); openSettings()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Einstellungen &amp; API Keys
+        </button>
+        <button class="user-menu-item" id="admin-menu-item" style="display:none" onclick="closeUserMenu(); switchTab('admin', document.getElementById('admin-tab-btn'))">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          Admin Panel
+        </button>
+        <div class="user-menu-divider"></div>
+        <a class="user-menu-item logout-item" href="/logout">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Logout
+        </a>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -2796,6 +2857,7 @@ async function adminInit() {
     const r = await fetch('/api/admin/users');
     if (r.ok) {
       document.getElementById('admin-tab-btn').style.display = '';
+      document.getElementById('admin-menu-item').style.display = '';
       adminLoadCodes();
       adminLoadUsers();
     }
@@ -2882,6 +2944,30 @@ async function adminResend(code, email) {
 }
 
 adminInit();
+
+
+// ── User menu ─────────────────────────────────────────────────────────────────
+function toggleUserMenu() {
+  document.getElementById('user-menu-dropdown').classList.toggle('open');
+}
+function closeUserMenu() {
+  document.getElementById('user-menu-dropdown').classList.remove('open');
+}
+// Close when clicking outside
+document.addEventListener('click', function(e) {
+  const menu = document.getElementById('user-menu');
+  if (menu && !menu.contains(e.target)) closeUserMenu();
+});
+// Set username initial in avatar + name from page or session
+(function() {
+  fetch('/api/user/settings').then(r => r.json()).then(d => {
+    if (d.username) {
+      const name = d.username;
+      document.getElementById('header-username').textContent = name;
+      document.querySelector('.user-menu-avatar').textContent = name[0].toUpperCase();
+    }
+  }).catch(()=>{});
+})();
 
 </script>
 
