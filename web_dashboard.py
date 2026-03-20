@@ -686,6 +686,12 @@ def api_prices():
 @app.route("/api/balance")
 def api_balance():
     try:
+        uid = session.get("user_id")
+        # Non-admin users without API keys should not see admin balance
+        if uid and uid != 1:
+            user = db.get_user_by_id(uid)
+            if not user or not user.get("api_key_enc"):
+                return jsonify({"no_keys": True})
         client = _get_client()
         data = client.get_balance("USDT")
 

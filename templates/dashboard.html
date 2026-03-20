@@ -2100,6 +2100,29 @@ document.getElementById('settings-modal').addEventListener('click', function(e) 
       const b = await r.json();
       if (b.error) return;
 
+      if (b.no_keys) {
+        // User has no API keys — show placeholder in all balance fields
+        ['b-available','b-margin','b-upnl','b-total'].forEach(id => {
+          const el = document.getElementById(id);
+          el.textContent = '—';
+          el.className = 'bal-value';
+        });
+        // Show hint below balance banner
+        let hint = document.getElementById('balance-no-keys-hint');
+        if (!hint) {
+          hint = document.createElement('div');
+          hint.id = 'balance-no-keys-hint';
+          hint.style.cssText = 'text-align:center;font-size:12px;color:var(--muted);padding:6px 0 0;';
+          hint.innerHTML = 'Keine API Keys hinterlegt — <button onclick="openSettings()" style="background:none;border:none;color:#58a6ff;font-size:12px;cursor:pointer;padding:0">Jetzt einrichten</button>';
+          document.getElementById('balance-banner').after(hint);
+        }
+        return;
+      }
+
+      // Remove hint if keys are now present
+      const hint = document.getElementById('balance-no-keys-hint');
+      if (hint) hint.remove();
+
       const available = b.available;
       const margin    = b.margin;
       const upnl      = b.unrealized_pnl;
