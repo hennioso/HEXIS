@@ -61,17 +61,23 @@ _SOL_MINTS = {
 
 def _fetch_trc20(wallet: str) -> list[dict]:
     """Return normalised incoming transfers on Tron (USDT + USDC)."""
+    import time as _time
     result = []
     headers = {}
     if config.TRONGRID_API_KEY:
         headers["TRON-PRO-API-KEY"] = config.TRONGRID_API_KEY
-    for token, contract in _TRX_CONTRACTS.items():
+    for i, (token, contract) in enumerate(_TRX_CONTRACTS.items()):
+        if i > 0:
+            _time.sleep(1.5)  # avoid back-to-back requests hitting rate limit
         try:
             r = requests.get(
                 f"https://api.trongrid.io/v1/accounts/{wallet}/transactions/trc20",
                 params={"limit": 50, "contract_address": contract, "only_to": "true"},
                 headers=headers, timeout=15,
             )
+            if r.status_code == 429:
+                log.debug(f"TronGrid ({token}) rate limited — will retry next cycle.")
+                continue
             r.raise_for_status()
             for tx in r.json().get("data", []):
                 if tx.get("to", "").lower() != wallet.lower():
@@ -84,7 +90,7 @@ def _fetch_trc20(wallet: str) -> list[dict]:
                     "chain":  "TRC20",
                 })
         except Exception as exc:
-            log.warning(f"TronGrid ({token}) error: {exc}")
+            log.debug(f"TronGrid ({token}) error: {exc}")
     return result
 
 
