@@ -14,7 +14,7 @@ import logging
 from dataclasses import dataclass, field
 
 from indicators import klines_to_df
-from strategy_selector import _score_sniper, _score_lsob, _score_scalp, _score_trend, _score_fvg
+            # lsob:   _score_lsob(klines_5m),           # disabled WR=25%
 
 log = logging.getLogger(__name__)
 
@@ -59,8 +59,8 @@ def scan_opportunities(
 
         scores = {
             # SNIPER scores on 1H chart — same data used for entry check
-            "sniper": _score_sniper(df_sniper, df15m),
-            "lsob":   _score_lsob(klines_5m),
+            # sniper: _score_sniper(df_sniper, df15m),  # disabled WR=32%
+            # lsob:   _score_lsob(klines_5m),           # disabled WR=25%
             "scalp":  _score_scalp(klines_5m),
             "trend":  _score_trend(df5m, df15m),
             # FVG uses 15m klines for meaningful gap sizes

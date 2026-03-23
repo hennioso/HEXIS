@@ -48,6 +48,7 @@ class ScalpSignal:
 def check_scalp_signal(
     klines_5m: list[dict],
     klines_1m: list[dict] | None = None,
+    klines_15m: list[dict] | None = None,
     bb_period: int = 20,
     bb_std: float = 2.0,
     rsi_period: int = 7,
@@ -107,6 +108,18 @@ def check_scalp_signal(
 
     if not direction:
         return None
+
+    # --- EMA200 short filter: only short when clearly below EMA200 on 15m ---
+    if direction == 'short' and klines_15m:
+        try:
+            from indicators import ema as _ema, klines_to_df as _ktdf
+            df15 = _ktdf(klines_15m)
+            ema200 = float(_ema(df15['close'], 200).iloc[-1])
+            current = float(df15.iloc[-1]['close'])
+            if current >= ema200:
+                return None  # price above EMA200 — no shorts in bullish trend
+        except Exception:
+            pass
 
     # ── 1m momentum confirmation (optional) ──────────────────────────────────
     # The 1m RSI(7) must also show momentum in the trade direction.

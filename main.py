@@ -155,6 +155,7 @@ def symbol_loop(
             elif strategy == "scalp":
                 scalp = check_scalp_signal(
                     klines_5m=klines_5m,
+                    klines_15m=klines_15m,
                     bb_period=config.SCALP_BB_PERIOD,
                     bb_std=config.SCALP_BB_STD,
                     rsi_period=config.SCALP_RSI_PERIOD,
@@ -528,6 +529,7 @@ def agent_scanner_loop(
                 scalp = check_scalp_signal(
                     klines_5m=klines_5m,
                     klines_1m=klines_1m,   # 1m momentum confirmation
+                    klines_15m=klines_15m, # EMA200 short filter
                     bb_period=config.SCALP_BB_PERIOD,
                     bb_std=config.SCALP_BB_STD,
                     rsi_period=config.SCALP_RSI_PERIOD,

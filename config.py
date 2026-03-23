@@ -50,7 +50,7 @@ MAX_MARGIN_USDT = float(os.getenv("MAX_MARGIN_USDT", "25.0"))
 # 'trend' = RSI + EMA Crossover (multi-timeframe, trend-following)
 # 'scalp' = Bollinger Bands + RSI(7) + Volume (mean-reversion, tighter SL/TP)
 # Configurable per symbol – same order as SYMBOLS
-STRATEGIES = ["auto", "auto", "auto", "auto", "auto", "auto", "auto", "auto", "auto"]  # Agent Mode default – strategy selector picks best per symbol
+STRATEGIES = ["auto", "auto", "auto", "auto", "scalp", "auto", "scalp", "auto", "auto"]  # BNB(4)+ADA(6) pinned to scalp
 
 # Scalping-specific parameters (override SL/TP for scalp symbols)
 SCALP_STOP_LOSS_PCT    = float(os.getenv("SCALP_STOP_LOSS_PCT", "0.008"))   # 0.8%

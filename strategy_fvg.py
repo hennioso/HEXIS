@@ -98,7 +98,8 @@ def check_fvg_signal(
             df15 = klines_to_df(klines_15m)
             ema50 = float(ema(df15["close"], FVG_TREND_EMA).iloc[-1])
             allow_long  = price > ema50
-            allow_short = price < ema50
+            ema200 = float(ema(df15["close"], 200).iloc[-1])
+            allow_short = price < ema50 and price < ema200  # confirmed bearish
         except Exception:
             pass
 
