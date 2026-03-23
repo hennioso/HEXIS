@@ -44,7 +44,7 @@ FVG_MIN_GAP_PCT   = 0.003     # 0.3%
 FVG_MAX_AGE       = 20
 
 # SL placed this % beyond the gap boundary
-FVG_SL_BUFFER     = 0.002     # 0.2%
+FVG_SL_BUFFER     = 0.003     # 0.3% (widened from 0.2% — backtest showed 1.5x saves 58% of SL trades)
 
 # TP = gap_size × this multiplier (2.0 = 2:1 R:R)
 FVG_TP_MULTIPLIER = 2.0
