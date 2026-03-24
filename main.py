@@ -20,6 +20,7 @@ import trade_analyst
 import circuit_breaker
 import indicators as ind
 from exchange import BitunixClient
+from exchange_hyperliquid import HyperliquidClient
 from strategy import check_signal
 from strategy_scalp import check_scalp_signal, ScalpSignal
 from strategy_sniper import check_sniper_signal
@@ -253,10 +254,19 @@ def agent_scanner_loop(
     log = logging.getLogger("AgentScanner")
 
     # Create one Trader per symbol (covers any symbol that may become "auto" at runtime)
-    traders = {
-        sym: Trader(client=client, risk_manager=risk_managers["trend"], symbol=sym, user_id=user_id)
-        for sym in config.SYMBOLS
-    }
+    # For Hyperliquid users: apply correct qty_precision per asset
+    _hl_sz = {}
+    if hasattr(client, "_SZ_DECIMALS"):
+        from exchange_hyperliquid import _SZ_DECIMALS as _hl_sz  # noqa
+    traders = {}
+    for sym in config.SYMBOLS:
+        _rm = dict(risk_managers)["trend"]  # use trend RM as base template
+        import copy as _copy
+        _rm_sym = _copy.copy(_rm)
+        coin = sym.replace("USDT", "")
+        if coin in _hl_sz:
+            _rm_sym.qty_precision = _hl_sz[coin]
+        traders[sym] = Trader(client=client, risk_manager=_rm_sym, symbol=sym, user_id=user_id)
     log.info("Agent Scanner started — waiting for AUTO symbols.")
 
     # Cooldown tracking: after a position closes, block re-entry for AGENT_COOLDOWN_SECONDS
@@ -305,7 +315,10 @@ def agent_scanner_loop(
             # ---- 3. Find candidates (AUTO + no open position + not in cooldown) ----
             now = time.time()
             candidates = []
+            _hl_supported = hasattr(client, "is_supported")
             for sym in auto_symbols:
+                if _hl_supported and not client.is_supported(sym):
+                    continue
                 if traders[sym].has_open_position():
                     continue
                 cooldown_remaining = _cooldown_until.get(sym, 0) - now
@@ -321,14 +334,22 @@ def agent_scanner_loop(
                 continue
 
             # ---- 4. Fetch klines for all candidates ----
+            # Filter out symbols not supported by the user's exchange (e.g. XAUT/XAGUSDT on HL)
+            _hl_filter = hasattr(client, "is_supported")
             klines_map: dict[str, dict] = {}
             for sym in candidates:
-                klines_map[sym] = {
-                    "1m":  client.get_klines(sym, "1m",  limit=30),   # scalp 1m confirmation
-                    "5m":  client.get_klines(sym, "5m",  limit=120),
-                    "15m": client.get_klines(sym, "15m", limit=120),
-                    "1h":  client.get_klines(sym, "1h",  limit=config.SNIPER_1H_LIMIT),  # sniper swing
-                }
+                if _hl_filter and not client.is_supported(sym):
+                    log.debug(f"AGENT: {sym} not supported on Hyperliquid — skipping.")
+                    continue
+                try:
+                    klines_map[sym] = {
+                        "1m":  client.get_klines(sym, "1m",  limit=30),
+                        "5m":  client.get_klines(sym, "5m",  limit=120),
+                        "15m": client.get_klines(sym, "15m", limit=120),
+                        "1h":  client.get_klines(sym, "1h",  limit=config.SNIPER_1H_LIMIT),
+                    }
+                except Exception as _ke:
+                    log.warning(f"AGENT: klines fetch failed for {sym}: {_ke} — skipping.")
 
             # ---- 5. Score all (symbol × strategy) combinations ----
             opps = strategy_scanner.scan_opportunities(candidates, klines_map)
@@ -678,7 +699,10 @@ def _start_user_trading(user: dict, global_stop: threading.Event):
     log      = logging.getLogger(f"user.{username}")
 
     try:
-        client = BitunixClient(user["api_key"], user["secret"])
+        if user.get("platform") == "hyperliquid":
+            client = HyperliquidClient(user["hl_wallet_address"], user["hl_private_key"])
+        else:
+            client = BitunixClient(user["api_key"], user["secret"])
         balance_data = client.get_balance("USDT")
         log.info(f"User '{username}' connected | available: {float(balance_data.get('available', 0)):.2f} USDT")
     except Exception as e:
@@ -735,7 +759,7 @@ def user_manager_loop(global_stop: threading.Event):
 
     while not global_stop.is_set():
         try:
-            active_users = db.get_users_with_api_keys()
+            active_users = db.get_users_with_exchange_keys()
             active_ids   = {u["id"] for u in active_users}
 
             # Start new users

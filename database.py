@@ -116,6 +116,8 @@ def init_db():
 
         # Migration: per-user position sizing control
         _add_column_if_missing(conn, "users", "margin_pct", "REAL DEFAULT 0.075")
+        _add_column_if_missing(conn, "users", "platform",        "TEXT DEFAULT 'bitunix'")
+        _add_column_if_missing(conn, "users", "hl_wallet_key_enc", "TEXT")
 
         # ── Pending crypto payments (awaiting on-chain confirmation) ─────────
         conn.execute("""
@@ -671,6 +673,94 @@ def update_user_api_keys(user_id: int, api_key: str, secret_key: str):
         conn.commit()
 
 
+
+def get_user_platform(user_id: int) -> str:
+    """Return 'bitunix' or 'hyperliquid' for the given user."""
+    with _connect() as conn:
+        row = conn.execute("SELECT platform FROM users WHERE id = ?", (user_id,)).fetchone()
+        if row and row["platform"]:
+            return row["platform"]
+    return "bitunix"
+
+
+def update_user_platform(user_id: int, platform: str):
+    """Store the user's chosen exchange platform."""
+    with _connect() as conn:
+        conn.execute("UPDATE users SET platform = ? WHERE id = ?", (platform, user_id))
+        conn.commit()
+
+
+def update_user_hl_key(user_id: int, wallet_address: str, private_key: str):
+    """Store encrypted Hyperliquid wallet credentials."""
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE users SET hl_wallet_key_enc = ? WHERE id = ?",
+            (_encrypt(wallet_address + "|" + private_key), user_id),
+        )
+        conn.commit()
+
+
+def get_user_hl_credentials(user_id: int) -> tuple[str, str] | None:
+    """Return (wallet_address, private_key) or None if not set."""
+    with _connect() as conn:
+        row = conn.execute("SELECT hl_wallet_key_enc FROM users WHERE id = ?", (user_id,)).fetchone()
+        if row and row["hl_wallet_key_enc"]:
+            try:
+                parts = _decrypt(row["hl_wallet_key_enc"]).split("|", 1)
+                if len(parts) == 2:
+                    return parts[0], parts[1]
+            except Exception:
+                pass
+    return None
+
+
+def get_users_with_exchange_keys() -> list[dict]:
+    """Return all active users that have any exchange credentials set."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM users WHERE is_active = 1 AND "
+            "(api_key_enc IS NOT NULL OR hl_wallet_key_enc IS NOT NULL)"
+        ).fetchall()
+    result = []
+    for row in rows:
+        platform = row["platform"] or "bitunix"
+        entry = {
+            "id":       row["id"],
+            "username": row["username"],
+            "platform": platform,
+        }
+        if platform == "hyperliquid":
+            try:
+                creds = _decrypt(row["hl_wallet_key_enc"]).split("|", 1)
+                if len(creds) == 2:
+                    entry["hl_wallet_address"] = creds[0]
+                    entry["hl_private_key"]    = creds[1]
+                    result.append(entry)
+            except Exception:
+                pass
+        else:
+            if row["api_key_enc"] and row["secret_key_enc"]:
+                try:
+                    entry["api_key"] = _decrypt(row["api_key_enc"])
+                    entry["secret"]  = _decrypt(row["secret_key_enc"])
+                    result.append(entry)
+                except Exception:
+                    pass
+    return result
+
+
+def get_user_has_exchange_keys(user_id: int) -> bool:
+    """Check if user has any exchange credentials (Bitunix or HL)."""
+    with _connect() as conn:
+        row = conn.execute("SELECT platform, api_key_enc, hl_wallet_key_enc FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not row:
+            return False
+        platform = row["platform"] or "bitunix"
+        if platform == "hyperliquid":
+            return bool(row["hl_wallet_key_enc"])
+        return bool(row["api_key_enc"])
+
+
 def get_user_margin_pct(user_id: int) -> float:
     """Return the per-user margin % (0–1). Falls back to 0.075 if not set."""
     with _connect() as conn:
@@ -689,7 +779,7 @@ def update_user_margin_pct(user_id: int, pct: float):
 
 
 def get_users_with_api_keys() -> list[dict]:
-    """Return all active users that have API keys set, with decrypted keys."""
+    """Backwards-compatible alias — returns Bitunix users only."""
     with _connect() as conn:
         rows = conn.execute(
             "SELECT * FROM users WHERE is_active = 1 AND api_key_enc IS NOT NULL AND secret_key_enc IS NOT NULL"
@@ -702,9 +792,10 @@ def get_users_with_api_keys() -> list[dict]:
                 "username": row["username"],
                 "api_key":  _decrypt(row["api_key_enc"]),
                 "secret":   _decrypt(row["secret_key_enc"]),
+                "platform": row["platform"] or "bitunix",
             })
         except Exception:
-            pass  # skip users with corrupted/old encrypted keys
+            pass
     return result
 
 

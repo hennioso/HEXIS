@@ -18,6 +18,7 @@ import strategy_state
 import circuit_breaker
 import mailer
 from exchange import BitunixClient
+from exchange_hyperliquid import HyperliquidClient
 from indicators import klines_to_df, add_indicators
 
 import random
@@ -345,23 +346,63 @@ def api_user_settings():
 
 @app.route("/api/user/keys", methods=["GET", "POST"])
 def api_user_keys():
-    """Get or update the logged-in user's Bitunix API credentials."""
+    """Get or update the logged-in user's exchange credentials (Bitunix or Hyperliquid)."""
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "not logged in"}), 401
     if request.method == "POST":
-        data    = request.get_json(force=True) or {}
-        api_key = data.get("api_key", "").strip()
-        secret  = data.get("secret_key", "").strip()
-        if not api_key or not secret:
-            return jsonify({"error": "api_key and secret_key required"}), 400
-        db.update_user_api_keys(user_id, api_key, secret)
-        # Invalidate client cache so next request picks up new keys
+        data     = request.get_json(force=True) or {}
+        platform = data.get("platform", "bitunix").strip()
+
+        if platform == "hyperliquid":
+            wallet = data.get("hl_wallet_address", "").strip()
+            pk     = data.get("hl_private_key", "").strip()
+            if not wallet or not pk:
+                return jsonify({"error": "hl_wallet_address and hl_private_key required"}), 400
+            db.update_user_hl_key(user_id, wallet, pk)
+            db.update_user_platform(user_id, "hyperliquid")
+        else:
+            api_key = data.get("api_key", "").strip()
+            secret  = data.get("secret_key", "").strip()
+            if not api_key or not secret:
+                return jsonify({"error": "api_key and secret_key required"}), 400
+            db.update_user_api_keys(user_id, api_key, secret)
+            db.update_user_platform(user_id, "bitunix")
+
         _user_clients.pop(user_id, None)
         return jsonify({"ok": True})
+
+    user     = db.get_user_by_id(user_id)
+    platform = db.get_user_platform(user_id)
+    has_keys = db.get_user_has_exchange_keys(user_id)
+    return jsonify({
+        "has_keys": has_keys,
+        "platform": platform,
+        "username": user["username"] if user else "",
+    })
+
+
+
+@app.route("/api/user/platform", methods=["POST"])
+def api_user_platform():
+    user_id = session.get("user_id")
+    if not user_id:
+        return jsonify({"error": "not logged in"}), 401
+    data     = request.get_json(force=True) or {}
+    platform = data.get("platform", "").strip()
+    if platform not in ("bitunix", "hyperliquid"):
+        return jsonify({"error": "invalid platform"}), 400
     user = db.get_user_by_id(user_id)
-    has_keys = bool(user and user.get("api_key_enc"))
-    return jsonify({"has_keys": has_keys, "username": user["username"] if user else ""})
+    if platform == "hyperliquid":
+        creds = db.get_user_hl_credentials(user_id)
+        if not creds:
+            return jsonify({"error": "no_hl_keys"}), 400
+    else:
+        if not user or not user.get("api_key_enc"):
+            return jsonify({"error": "no_bitunix_keys"}), 400
+    db.update_user_platform(user_id, platform)
+    _user_clients.pop(user_id, None)
+    return jsonify({"ok": True, "platform": platform})
 
 _client = BitunixClient(config.API_KEY, config.SECRET_KEY)   # admin / fallback client
 
@@ -369,27 +410,34 @@ _client = BitunixClient(config.API_KEY, config.SECRET_KEY)   # admin / fallback 
 _user_clients: dict[int, BitunixClient] = {}
 
 
-def _get_client() -> BitunixClient:
+def _get_client():
     """
-    Return the BitunixClient for the currently logged-in user.
-    Falls back to the admin client if the user has no API keys stored.
+    Return the exchange client for the currently logged-in user.
+    Supports both BitunixClient and HyperliquidClient based on user's platform setting.
+    Falls back to the admin BitunixClient if no credentials are stored.
     """
     uid = session.get("user_id")
     if not uid:
         return _client
 
-    # Serve from cache
     if uid in _user_clients:
         return _user_clients[uid]
 
-    # Build client from DB keys
     try:
-        users = db.get_users_with_api_keys()
-        user  = next((u for u in users if u["id"] == uid), None)
-        if user:
-            client = BitunixClient(user["api_key"], user["secret"])
-            _user_clients[uid] = client
-            return client
+        platform = db.get_user_platform(uid)
+        if platform == "hyperliquid":
+            creds = db.get_user_hl_credentials(uid)
+            if creds:
+                client = HyperliquidClient(creds[0], creds[1])
+                _user_clients[uid] = client
+                return client
+        else:
+            users = db.get_users_with_api_keys()
+            user  = next((u for u in users if u["id"] == uid), None)
+            if user:
+                client = BitunixClient(user["api_key"], user["secret"])
+                _user_clients[uid] = client
+                return client
     except Exception:
         pass
 
@@ -690,7 +738,7 @@ def api_balance():
         # Non-admin users without API keys should not see admin balance
         if uid and uid != 1:
             user = db.get_user_by_id(uid)
-            if not user or not user.get("api_key_enc"):
+            if not db.get_user_has_exchange_keys(uid):
                 return jsonify({"no_keys": True})
         client = _get_client()
         data = client.get_balance("USDT")

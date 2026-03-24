@@ -81,7 +81,7 @@ def send_trade_close(symbol, direction, strategy, entry, exit_p, pnl, status, us
         f"<b>HEXIS — Trade Closed</b> {result_emoji}\n"
         f"{dir_str} <b>{symbol}</b> [{strategy.upper()}]\n"
         f"Entry: <code>{entry:.4f}</code> → Exit: <code>{exit_p:.4f}</code>\n"
-        f"PnL: <b>{pnl_str} USDT</b>",
+        f"PnL: <b>{pnl_str} USD</b>",
         chat_id=_get_chat_id(user_id),
     )
 
@@ -91,7 +91,7 @@ def send_sniper_tp(symbol, tp_num, direction, tp_price, partial_pnl, user_id=Non
     _send(
         f"<b>HEXIS — SNIPER TP{tp_num}</b> ✅\n"
         f"{'LONG' if direction == 'long' else 'SHORT'} <b>{symbol}</b>\n"
-        f"TP{tp_num} @ <code>{tp_price:.4f}</code>  Partial PnL: <b>{pnl_str} USDT</b>",
+        f"TP{tp_num} @ <code>{tp_price:.4f}</code>  Partial PnL: <b>{pnl_str} USD</b>",
         chat_id=_get_chat_id(user_id),
     )
 
